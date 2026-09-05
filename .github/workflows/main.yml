@@ -1,0 +1,27 @@
+name: SENTINEL WIF Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  auth-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/780100133442/locations/global/workloadIdentityPools/sentinel-github-actions/providers/sentinel-github
+          service_account: sentinel-monitor@devmonitor-sentinel.iam.gserviceaccount.com
+
+      - name: Authentication success
+        run: |
+          echo "SENTINEL WIF authentication succeeded."
