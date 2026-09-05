@@ -80,6 +80,10 @@ canvas{width:100%;height:96px;display:block}
 footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-size:10px;line-height:1.5}
 @media(max-width:760px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}.metric .value{font-size:18px}}
 </style>
+
+<script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 </head>
 <body>
 <header>
@@ -132,160 +136,223 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
   Production telemetry keys are reserved but will remain「未導入」until ATLAS / CAESAR stable receive Telemetry v0.2.
 </footer>
 
+
 <script>
 const LIMITS={reads:50000,writes:20000,deletes:20000};
 const APPS=[
-  {id:"atlas-prod",name:"ATLAS",env:"Production",group:"prod",key:"sentinelTelemetry.v0.2.ATLAS"},
-  {id:"caesar-prod",name:"CAESAR",env:"Production",group:"prod",key:"sentinelTelemetry.v0.2.CAESAR"},
-  {id:"atlas-dev",name:"ATLAS",env:"Development",group:"dev",key:"sentinelTelemetry.v0.2.ATLAS-Development"},
-  {id:"caesar-dev",name:"CAESAR",env:"Development",group:"dev",key:"sentinelTelemetry.v0.2.Dev-CAESAR"}
+  {id:"atlas-prod",name:"ATLAS",env:"Production",group:"prod"},
+  {id:"caesar-prod",name:"CAESAR",env:"Production",group:"prod"},
+  {id:"atlas-dev",name:"ATLAS",env:"Development",group:"dev"},
+  {id:"caesar-dev",name:"CAESAR",env:"Development",group:"dev"}
 ];
+const SHARED_CONFIG={
+  apiKey:"AIzaSyCZOI7sTRGn2xw6VWPkXblb8KW4TM_BcwU",
+  authDomain:"dev-caesar.firebaseapp.com",
+  projectId:"dev-caesar",
+  storageBucket:"dev-caesar.firebasestorage.app",
+  messagingSenderId:"339298618142",
+  appId:"1:339298618142:web:69e5af56d4fb66840f170f"
+};
+const SHARED_SITE_KEY="6LffvagtAAAAAMYORF3VlYDdUBemsfqunrxkArCo";
+const SHARED_COLLECTION="sentinelTelemetryDaily";
+const AUTO_REFRESH_MS=10*60*1000;
 let selectedRange="quotaDayPT";
+let sharedApp=null, sharedAuth=null, sharedAppCheck=null;
+let remoteDocs=[];
+let lastRemoteError="";
+let readsThisSession=0;
 
 function ptDateKey(ts){
-  try{
-    const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(ts));
-    const get=t=>parts.find(p=>p.type===t)?.value||"";
-    return `${get("year")}-${get("month")}-${get("day")}`;
-  }catch(_){return "";}
+  const p=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(ts));
+  const g=t=>p.find(x=>x.type===t)?.value||"";
+  return `${g("year")}-${g("month")}-${g("day")}`;
 }
-function loadStore(key){
-  try{
-    const v=JSON.parse(localStorage.getItem(key)||"null");
-    if(v&&v.version==="0.2"&&v.buckets&&typeof v.buckets==="object") return v;
-  }catch(_){}
+function ptDateKeysForRange(range){
+  const out=[];
+  const now=Date.now(),days=range==="week"?8:range==="day24"?2:1;
+  for(let i=0;i<days;i++)out.push(ptDateKey(now-i*24*60*60*1000));
+  return [...new Set(out)];
+}
+async function initShared(){
+  if(sharedApp)return;
+  sharedApp=firebase.initializeApp(SHARED_CONFIG,"sentinel-dashboard-shared");
+  sharedAuth=sharedApp.auth();
+  sharedAppCheck=sharedApp.appCheck();
+  sharedAppCheck.activate(new firebase.appCheck.ReCaptchaEnterpriseProvider(SHARED_SITE_KEY),true);
+  if(!sharedAuth.currentUser)await sharedAuth.signInAnonymously();
+}
+async function sharedHeaders(){
+  await initShared();
+  const user=sharedAuth.currentUser|| (await sharedAuth.signInAnonymously()).user;
+  const id=await user.getIdToken();
+  const h={"Authorization":"Bearer "+id,"Content-Type":"application/json"};
+  try{const a=await sharedAppCheck.getToken(false);if(a&&a.token)h["X-Firebase-AppCheck"]=a.token;}catch(_){}
+  return h;
+}
+function decodeVal(v){
+  if(!v)return null;
+  if("stringValue" in v)return v.stringValue;
+  if("integerValue" in v)return Number(v.integerValue);
+  if("doubleValue" in v)return Number(v.doubleValue);
+  if("timestampValue" in v)return v.timestampValue;
   return null;
 }
-function buckets(store){return store?Object.values(store.buckets||{}).sort((a,b)=>a.t-b.t):[]}
-function sumFor(store,range){
-  if(!store)return {reads:0,writes:0,deletes:0};
-  const now=Date.now(), today=ptDateKey(now);
-  return buckets(store).reduce((a,b)=>{
-    let ok=false;
-    if(range==="hour")ok=now-Number(b.t)<=3600000;
-    else if(range==="day24")ok=now-Number(b.t)<=86400000;
-    else if(range==="week")ok=now-Number(b.t)<=604800000;
-    else ok=ptDateKey(Number(b.t))===today;
-    if(ok){a.reads+=+b.reads||0;a.writes+=+b.writes||0;a.deletes+=+b.deletes||0}
-    return a;
-  },{reads:0,writes:0,deletes:0});
+function decodeDoc(doc){
+  const f=(doc&&doc.fields)||{},o={};
+  Object.keys(f).forEach(k=>o[k]=decodeVal(f[k]));
+  o._name=doc&&doc.name||"";
+  return o;
+}
+async function fetchShared(){
+  const headers=await sharedHeaders();
+  const dates=ptDateKeysForRange(selectedRange);
+  const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents:runQuery`;
+  const body={structuredQuery:{
+    from:[{collectionId:SHARED_COLLECTION}],
+    where:dates.length===1
+      ? {fieldFilter:{field:{fieldPath:"datePT"},op:"EQUAL",value:{stringValue:dates[0]}}}
+      : {fieldFilter:{field:{fieldPath:"datePT"},op:"IN",value:{arrayValue:{values:dates.map(x=>({stringValue:x}))}}}}
+  }};
+  const res=await fetch(url,{method:"POST",headers,body:JSON.stringify(body),cache:"no-store"});
+  const raw=await res.text();
+  if(!res.ok)throw new Error(`Shared read HTTP ${res.status}: ${raw.slice(0,300)}`);
+  const rows=raw?JSON.parse(raw):[];
+  const docs=(Array.isArray(rows)?rows:[]).filter(x=>x&&x.document).map(x=>decodeDoc(x.document));
+  readsThisSession+=Math.max(1,docs.length);
+  remoteDocs=docs;
+  lastRemoteError="";
+  return docs;
+}
+function docsForApp(id){return remoteDocs.filter(d=>d.appId===id)}
+function sumApp(id,range){
+  const now=Date.now(),today=ptDateKey(now),docs=docsForApp(id),out={reads:0,writes:0,deletes:0};
+  docs.forEach(d=>{
+    if(range==="quotaDayPT"){
+      if(d.datePT===today){out.reads+=+d.reads||0;out.writes+=+d.writes||0;out.deletes+=+d.deletes||0}
+      return;
+    }
+    Object.keys(d).forEach(k=>{
+      const m=/^([rwd])_(\d{4})$/.exec(k);if(!m)return;
+      const hh=+m[2].slice(0,2),mm=+m[2].slice(2);
+      // Approximate bucket timestamp in PT by testing formatted PT bucket against dates.
+      // For selection, 24h/week include all fetched daily buckets; 1h filters by bucket age using a compact matcher below.
+      let include=true;
+      if(range==="hour"){
+        const target=`${String(hh).padStart(2,"0")}${String(mm).padStart(2,"0")}`;
+        include=isRecentPtBucket(d.datePT,target,70);
+      }
+      if(include){
+        if(m[1]==="r")out.reads+=+d[k]||0;
+        if(m[1]==="w")out.writes+=+d[k]||0;
+        if(m[1]==="d")out.deletes+=+d[k]||0;
+      }
+    });
+  });
+  return out;
+}
+function isRecentPtBucket(date,bucket,minutes){
+  const now=Date.now();
+  for(let i=0;i<=minutes;i+=10){
+    const t=now-i*60000;
+    const p=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(new Date(t));
+    const g=x=>p.find(z=>z.type===x)?.value||"00";
+    let h=g("hour");if(h==="24")h="00";
+    const b=h+String(Math.floor(+g("minute")/10)*10).padStart(2,"0");
+    const d=`${g("year")}-${g("month")}-${g("day")}`;
+    if(d===date&&b===bucket)return true;
+  }return false;
+}
+function seriesForApp(id,range){
+  const docs=docsForApp(id),pts=[];
+  docs.forEach(d=>{
+    Object.keys(d).forEach(k=>{
+      const m=/^r_(\d{4})$/.exec(k);if(!m)return;
+      const b=m[1],key=`${d.datePT} ${b}`;
+      const v=(+d[`r_${b}`]||0)+(+d[`w_${b}`]||0)+(+d[`d_${b}`]||0);
+      if(range==="hour"&&!isRecentPtBucket(d.datePT,b,70))return;
+      pts.push({key,v});
+    });
+  });
+  pts.sort((a,b)=>a.key.localeCompare(b.key));
+  return pts;
 }
 function fmt(n){return Number(n||0).toLocaleString("ja-JP")}
 function pct(n,lim){return Math.min(999,(n/lim)*100)}
 function severity(p){return p>=95?"danger":p>=80?"warn":""}
-function statusFor(store){
-  if(!store)return ["未導入","wait"];
-  const bs=buckets(store);
-  if(!bs.length)return ["データなし","empty"];
-  return ["計測中","live"];
+function latestSeen(id){
+  const vals=docsForApp(id).map(d=>Date.parse(d.lastSeen||"")).filter(Number.isFinite);
+  return vals.length?Math.max(...vals):null;
 }
-function latestBucketTime(store){
-  const bs=buckets(store);return bs.length?Math.max(...bs.map(b=>+b.t||0)):null;
-}
-function spikeAlerts(store){
-  if(!store)return [];
-  const bs=buckets(store),now=Date.now();
-  const recent=bs.filter(b=>now-b.t<=5*60000);
-  const base=bs.filter(b=>now-b.t>5*60000&&now-b.t<=35*60000);
-  const sum=(arr,k)=>arr.reduce((a,b)=>a+(+b[k]||0),0);
-  const out=[];
-  ["reads","writes","deletes"].forEach(k=>{
-    const r=sum(recent,k)/Math.max(1,recent.length);
-    const b=sum(base,k)/Math.max(1,base.length);
-    if(base.length>=5 && r>=Math.max(5,b*3)){
-      out.push({type:"warn",text:`${k.toUpperCase()} が直前平均の約 ${Math.max(1,Math.round(r/Math.max(.01,b)))} 倍`});
-    }
-  });
-  return out;
-}
-function quotaAlerts(s){
-  const out=[];
-  Object.entries(LIMITS).forEach(([k,lim])=>{
-    const p=pct(s[k],lim);
-    if(p>=95)out.push({type:"danger",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 上限間近`});
-    else if(p>=80)out.push({type:"warn",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 注意域`});
-  });
-  return out;
-}
-function drawChart(canvas,store,range){
-  const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1;
-  const w=canvas.clientWidth,h=canvas.clientHeight;
-  canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));
-  ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
-  const now=Date.now(), today=ptDateKey(now);
-  let bs=buckets(store).filter(b=>{
-    if(range==="hour")return now-b.t<=3600000;
-    if(range==="day24")return now-b.t<=86400000;
-    if(range==="week")return now-b.t<=604800000;
-    return ptDateKey(Number(b.t))===today;
-  });
-  if(!bs.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No telemetry",10,h/2);return}
-  const vals=bs.map(b=>(+b.reads||0)+(+b.writes||0)+(+b.deletes||0));
-  const max=Math.max(1,...vals);
-  ctx.strokeStyle="#263741";ctx.lineWidth=1;
-  [0.25,0.5,0.75].forEach(f=>{ctx.beginPath();ctx.moveTo(0,h*f);ctx.lineTo(w,h*f);ctx.stroke()});
-  ctx.strokeStyle="#5aa4c8";ctx.lineWidth=2;ctx.beginPath();
-  bs.forEach((b,i)=>{
-    const x=bs.length===1?w/2:(i/(bs.length-1))*w;
-    const y=h-5-(vals[i]/max)*(h-10);
-    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
-  });ctx.stroke();
+function statusFor(id){
+  const t=latestSeen(id);
+  if(!t)return ["未受信","wait"];
+  if(Date.now()-t<=25*60*1000)return ["共有中","live"];
+  return ["停止/古い","wait"];
 }
 function metricHtml(label,val,lim,quotaMode){
   const p=quotaMode?pct(val,lim):0,sev=severity(p);
-  return `<div class="metric">
-    <div class="label">${label}</div><div class="value">${fmt(val)}</div>
-    <div class="pct">${quotaMode?p.toFixed(1)+"% of daily free tier":"selected range"}</div>
-    <div class="bar"><div class="fill ${sev}" style="width:${quotaMode?Math.min(100,p):0}%"></div></div>
-  </div>`;
+  return `<div class="metric"><div class="label">${label}</div><div class="value">${fmt(val)}</div>
+  <div class="pct">${quotaMode?p.toFixed(1)+"% of daily free tier":"selected range"}</div>
+  <div class="bar"><div class="fill ${sev}" style="width:${quotaMode?Math.min(100,p):0}%"></div></div></div>`;
 }
-function cardHtml(app,store){
-  const s=sumFor(store,selectedRange),qs=sumFor(store,"quotaDayPT");
-  const [st,cls]=statusFor(store);
-  const latest=latestBucketTime(store);
-  const alerts=[...quotaAlerts(qs),...spikeAlerts(store)];
-  return `<section class="card" data-app="${app.id}">
-    <div class="card-head"><div><div class="name">${app.name}</div><div class="env">${app.env}</div></div>
-      <span class="status ${cls}">${st}</span></div>
-    ${store?`
-      <div class="metrics">
-        ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
-        ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
-        ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
-      </div>
-      <div class="chart-wrap"><div class="chart-head"><span class="chart-title">Activity · ${rangeLabel(selectedRange)}</span><span class="chart-title">R+W+D / min</span></div><canvas></canvas></div>
-      <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
-      <div class="meta"><span>Telemetry ${store.version}</span><span>最終記録 ${latest?new Date(latest).toLocaleTimeString("ja-JP"):"—"}</span></div>
-    `:`<div class="empty-message">Telemetry v0.2 未導入<br>stable移植後に自動表示</div>`}
-  </section>`;
+function quotaAlerts(s){
+  const out=[];Object.entries(LIMITS).forEach(([k,lim])=>{const p=pct(s[k],lim);
+    if(p>=95)out.push({type:"danger",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 上限間近`});
+    else if(p>=80)out.push({type:"warn",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 注意域`});
+  });return out;
 }
 function rangeLabel(r){return ({hour:"1時間",day24:"24時間",week:"1週間",quotaDayPT:"PT当日"})[r]||r}
-function render(){
-  const stores=new Map(APPS.map(a=>[a.id,loadStore(a.key)]));
-  document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(a=>cardHtml(a,stores.get(a.id))).join("");
-  document.getElementById("devGrid").innerHTML=APPS.filter(a=>a.group==="dev").map(a=>cardHtml(a,stores.get(a.id))).join("");
-  let src=0,total={reads:0,writes:0,deletes:0};
-  APPS.forEach(a=>{const st=stores.get(a.id);if(st){src++;const s=sumFor(st,selectedRange);total.reads+=s.reads;total.writes+=s.writes;total.deletes+=s.deletes}});
-  document.getElementById("sumSources").textContent=`${src} / 4`;
-  document.getElementById("sumReads").textContent=fmt(total.reads);
-  document.getElementById("sumWrites").textContent=fmt(total.writes);
-  document.getElementById("sumDeletes").textContent=fmt(total.deletes);
-  document.getElementById("ptDate").textContent=`PT quota day ${ptDateKey(Date.now())}`;
-  document.querySelectorAll(".card[data-app]").forEach(card=>{
-    const app=APPS.find(a=>a.id===card.dataset.app),canvas=card.querySelector("canvas");
-    if(canvas)drawChart(canvas,stores.get(app.id),selectedRange);
-  });
+function drawChart(canvas,id){
+  const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
+  canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);const pts=seriesForApp(id,selectedRange);
+  if(!pts.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No shared telemetry",10,h/2);return}
+  const vals=pts.map(x=>x.v),max=Math.max(1,...vals);
+  ctx.strokeStyle="#263741";ctx.lineWidth=1;[.25,.5,.75].forEach(f=>{ctx.beginPath();ctx.moveTo(0,h*f);ctx.lineTo(w,h*f);ctx.stroke()});
+  ctx.strokeStyle="#5aa4c8";ctx.lineWidth=2;ctx.beginPath();
+  pts.forEach((p,i)=>{const x=pts.length===1?w/2:(i/(pts.length-1))*w,y=h-5-(p.v/max)*(h-10);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
 }
-document.getElementById("rangeSeg").addEventListener("click",e=>{
+function cardHtml(app){
+  const s=sumApp(app.id,selectedRange),qs=sumApp(app.id,"quotaDayPT"),[st,cls]=statusFor(app.id),last=latestSeen(app.id);
+  const alerts=quotaAlerts(qs),has=docsForApp(app.id).length>0;
+  return `<section class="card" data-app="${app.id}">
+    <div class="card-head"><div><div class="name">${app.name}</div><div class="env">${app.env}</div></div><span class="status ${cls}">${st}</span></div>
+    ${has?`<div class="metrics">
+      ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
+      ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
+      ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
+    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">Shared Activity · ${rangeLabel(selectedRange)}</span><span class="chart-title">R+W+D / 10min</span></div><canvas></canvas></div>
+    <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
+    <div class="meta"><span>Shared v0.3</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
+    :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
+  </section>`;
+}
+function render(){
+  document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(cardHtml).join("");
+  document.getElementById("devGrid").innerHTML=APPS.filter(a=>a.group==="dev").map(cardHtml).join("");
+  let src=0,total={reads:0,writes:0,deletes:0};
+  APPS.forEach(a=>{if(docsForApp(a.id).length){src++;const s=sumApp(a.id,selectedRange);total.reads+=s.reads;total.writes+=s.writes;total.deletes+=s.deletes}});
+  document.getElementById("sumSources").textContent=`${src} / 4`;
+  document.getElementById("sumReads").textContent=fmt(total.reads);document.getElementById("sumWrites").textContent=fmt(total.writes);document.getElementById("sumDeletes").textContent=fmt(total.deletes);
+  document.getElementById("ptDate").textContent=`PT quota day ${ptDateKey(Date.now())}`;
+  document.getElementById("liveBadge").textContent=lastRemoteError?"SHARED ERROR":"SHARED FIRESTORE";
+  document.querySelectorAll(".card[data-app]").forEach(c=>{const cv=c.querySelector("canvas");if(cv)drawChart(cv,c.dataset.app)});
+}
+async function refresh(){
+  const btn=document.getElementById("refreshBtn");btn.disabled=true;btn.textContent="↻ 取得中";
+  try{await fetchShared();}catch(e){lastRemoteError=e.message||String(e);console.error(e);}
+  render();btn.disabled=false;btn.textContent="↻ 再読込";
+}
+document.getElementById("rangeSeg").addEventListener("click",async e=>{
   const b=e.target.closest("button[data-range]");if(!b)return;
-  selectedRange=b.dataset.range;
-  document.querySelectorAll("#rangeSeg button").forEach(x=>x.classList.toggle("active",x===b));
-  render();
+  selectedRange=b.dataset.range;document.querySelectorAll("#rangeSeg button").forEach(x=>x.classList.toggle("active",x===b));await refresh();
 });
-document.getElementById("refreshBtn").addEventListener("click",render);
+document.getElementById("refreshBtn").addEventListener("click",refresh);
 window.addEventListener("resize",()=>setTimeout(render,60));
-render();
-setInterval(render,5000);
+document.querySelector(".notice").innerHTML="v0.2 SHARED：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
+refresh();
+setInterval(refresh,AUTO_REFRESH_MS);
 </script>
+
 </body>
 </html>
