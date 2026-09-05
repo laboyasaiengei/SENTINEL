@@ -1,4 +1,4 @@
-name: SENTINEL WIF Test
+name: SENTINEL Monitoring Test
 
 on:
   workflow_dispatch:
@@ -8,20 +8,38 @@ permissions:
   id-token: write
 
 jobs:
-  auth-test:
+  monitoring-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Authenticate to Google Cloud
-        id: auth
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: projects/780100133442/locations/global/workloadIdentityPools/sentinel-github-actions/providers/sentinel-github
           service_account: sentinel-monitor@devmonitor-sentinel.iam.gserviceaccount.com
 
-      - name: Authentication success
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Show active identity
         run: |
-          echo "SENTINEL WIF authentication succeeded."
+          echo "=== ACTIVE ACCOUNT ==="
+          gcloud auth list --filter=status:ACTIVE --format="value(account)"
+
+      - name: Read ATLAS Firestore Monitoring data
+        run: |
+          echo "=== SENTINEL -> ATLAS MONITORING TEST ==="
+
+          END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          START_TIME=$(date -u -d "6 hours ago" +"%Y-%m-%dT%H:%M:%SZ")
+
+          TOKEN=$(gcloud auth print-access-token)
+
+          curl --fail-with-body \
+            -H "Authorization: Bearer ${TOKEN}" \
+            --get \
+            "https://monitoring.googleapis.com/v3/projects/kyujitukanri/timeSeries" \
+            --data-urlencode 'filter=metric.type="firestore.googleapis.com/document/read_ops_count"' \
+            --data-urlencode "interval.startTime=${START_TIME}" \
+            --data-urlencode "interval.endTime=${END_TIME}" \
+            --data-urlencode 'view=FULL'
