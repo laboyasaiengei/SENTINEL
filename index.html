@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>SENTINEL</title>
+<style>
+:root{
+  --bg:#0d1318; --panel:#141d24; --panel2:#18242c; --line:#293943;
+  --ink:#edf4f7; --muted:#91a2ad; --accent:#5aa4c8; --ok:#69b88f;
+  --warn:#e2ad58; --danger:#dc6b6b; --track:#24313a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
+body{min-height:100vh;padding-bottom:30px}
+header{
+  position:sticky;top:0;z-index:5;
+  background:rgba(13,19,24,.94);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+}
+.header-inner{max-width:1180px;margin:auto;padding:14px 18px 12px}
+.brand-row{display:flex;align-items:center;gap:12px;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{
+  width:31px;height:31px;border:1px solid #416679;border-radius:8px;
+  display:grid;place-items:center;font-weight:900;font-size:18px;color:#9ed2eb;
+  background:#10222c
+}
+h1{font-size:19px;letter-spacing:.08em;margin:0}
+.sub{font-size:11px;color:var(--muted);margin-top:2px}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.pill{border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:10px;color:var(--muted);background:#10191f}
+.pill.ok{color:#a4d9ba;border-color:#305b43}
+main{max-width:1180px;margin:0 auto;padding:16px 18px}
+.notice{
+  background:#10202a;border:1px solid #24485d;border-radius:12px;padding:10px 12px;
+  color:#b7d9e9;font-size:12px;line-height:1.55;margin-bottom:14px
+}
+.toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap}
+.segment{display:flex;background:#10181e;border:1px solid var(--line);border-radius:10px;padding:3px}
+.segment button,.ghost{
+  border:0;background:transparent;color:var(--muted);padding:7px 10px;border-radius:7px;cursor:pointer;font-size:11px
+}
+.segment button.active{background:#20313b;color:#fff}
+.ghost{border:1px solid var(--line);background:#111a20}
+.section-title{font-size:13px;color:#b8c8d0;font-weight:700;letter-spacing:.04em;margin:18px 0 8px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{background:linear-gradient(180deg,var(--panel),#111a20);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.card-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.name{font-weight:800;font-size:15px}.env{font-size:10px;color:var(--muted);margin-top:2px}
+.status{font-size:10px;padding:4px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.status.live{color:#9bd7b4;border-color:#2f6547;background:#102219}
+.status.wait{color:#d7be8a;border-color:#665438;background:#241e14}
+.status.empty{color:#93a3ad}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px}
+.metric{background:var(--panel2);border:1px solid #22313a;border-radius:10px;padding:9px}
+.metric .label{font-size:9.5px;color:var(--muted);text-transform:uppercase}
+.metric .value{font-size:20px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+.metric .pct{font-size:9.5px;color:var(--muted);margin-top:2px}
+.bar{height:5px;background:var(--track);border-radius:99px;overflow:hidden;margin-top:5px}
+.fill{height:100%;width:0;background:var(--ok);border-radius:99px}
+.fill.warn{background:var(--warn)}.fill.danger{background:var(--danger)}
+.chart-wrap{margin-top:12px;background:#10181e;border:1px solid #22313a;border-radius:10px;padding:9px}
+.chart-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.chart-title{font-size:10px;color:var(--muted)}
+canvas{width:100%;height:96px;display:block}
+.alerts{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.alert{font-size:10.5px;border-radius:8px;padding:7px 9px;border:1px solid #3a4650;background:#151d22;color:#bac7ce}
+.alert.warn{border-color:#65502f;color:#e3c68b;background:#241d13}
+.alert.danger{border-color:#6c3939;color:#f0aaaa;background:#271515}
+.meta{display:flex;justify-content:space-between;gap:8px;margin-top:10px;color:var(--muted);font-size:9.5px;flex-wrap:wrap}
+.empty-message{padding:28px 8px;text-align:center;color:var(--muted);font-size:12px}
+.summary{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px
+}
+.summary .box{background:#111a20;border:1px solid var(--line);border-radius:12px;padding:11px}
+.summary .k{font-size:9.5px;color:var(--muted)}
+.summary .v{font-size:18px;font-weight:800;margin-top:3px}
+footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-size:10px;line-height:1.5}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}.metric .value{font-size:18px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="brand-row">
+      <div class="brand">
+        <div class="logo">S</div>
+        <div><h1>SENTINEL</h1><div class="sub">ATLAS / CAESAR local telemetry monitor</div></div>
+      </div>
+      <div class="header-right">
+        <span id="ptDate" class="pill">PT quota day —</span>
+        <span id="liveBadge" class="pill ok">LOCAL ONLY</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="notice">
+    v0.1 LOCAL：同じブラウザ・同じ origin に保存されたSENTINEL Telemetryを読み取ります。
+    Google Cloud Monitoring / Firestoreへの監視用通信は行いません。表示値はアプリ起因の推計値です。
+  </div>
+
+  <div class="toolbar">
+    <div class="segment" id="rangeSeg">
+      <button data-range="hour">1時間</button>
+      <button data-range="day24">24時間</button>
+      <button data-range="week">1週間</button>
+      <button data-range="quotaDayPT" class="active">PT当日</button>
+    </div>
+    <button class="ghost" id="refreshBtn">↻ 再読込</button>
+  </div>
+
+  <div class="summary">
+    <div class="box"><div class="k">接続データ源</div><div class="v" id="sumSources">0 / 4</div></div>
+    <div class="box"><div class="k">合計 Reads</div><div class="v" id="sumReads">0</div></div>
+    <div class="box"><div class="k">合計 Writes</div><div class="v" id="sumWrites">0</div></div>
+    <div class="box"><div class="k">合計 Deletes</div><div class="v" id="sumDeletes">0</div></div>
+  </div>
+
+  <div class="section-title">PRODUCTION</div>
+  <div class="grid" id="prodGrid"></div>
+
+  <div class="section-title">DEVELOPMENT</div>
+  <div class="grid" id="devGrid"></div>
+</main>
+
+<footer>
+  SENTINEL v0.1 LOCAL · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
+  Production telemetry keys are reserved but will remain「未導入」until ATLAS / CAESAR stable receive Telemetry v0.2.
+</footer>
+
+<script>
+const LIMITS={reads:50000,writes:20000,deletes:20000};
+const APPS=[
+  {id:"atlas-prod",name:"ATLAS",env:"Production",group:"prod",key:"sentinelTelemetry.v0.2.ATLAS"},
+  {id:"caesar-prod",name:"CAESAR",env:"Production",group:"prod",key:"sentinelTelemetry.v0.2.CAESAR"},
+  {id:"atlas-dev",name:"ATLAS",env:"Development",group:"dev",key:"sentinelTelemetry.v0.2.ATLAS-Development"},
+  {id:"caesar-dev",name:"CAESAR",env:"Development",group:"dev",key:"sentinelTelemetry.v0.2.Dev-CAESAR"}
+];
+let selectedRange="quotaDayPT";
+
+function ptDateKey(ts){
+  try{
+    const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(ts));
+    const get=t=>parts.find(p=>p.type===t)?.value||"";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  }catch(_){return "";}
+}
+function loadStore(key){
+  try{
+    const v=JSON.parse(localStorage.getItem(key)||"null");
+    if(v&&v.version==="0.2"&&v.buckets&&typeof v.buckets==="object") return v;
+  }catch(_){}
+  return null;
+}
+function buckets(store){return store?Object.values(store.buckets||{}).sort((a,b)=>a.t-b.t):[]}
+function sumFor(store,range){
+  if(!store)return {reads:0,writes:0,deletes:0};
+  const now=Date.now(), today=ptDateKey(now);
+  return buckets(store).reduce((a,b)=>{
+    let ok=false;
+    if(range==="hour")ok=now-Number(b.t)<=3600000;
+    else if(range==="day24")ok=now-Number(b.t)<=86400000;
+    else if(range==="week")ok=now-Number(b.t)<=604800000;
+    else ok=ptDateKey(Number(b.t))===today;
+    if(ok){a.reads+=+b.reads||0;a.writes+=+b.writes||0;a.deletes+=+b.deletes||0}
+    return a;
+  },{reads:0,writes:0,deletes:0});
+}
+function fmt(n){return Number(n||0).toLocaleString("ja-JP")}
+function pct(n,lim){return Math.min(999,(n/lim)*100)}
+function severity(p){return p>=95?"danger":p>=80?"warn":""}
+function statusFor(store){
+  if(!store)return ["未導入","wait"];
+  const bs=buckets(store);
+  if(!bs.length)return ["データなし","empty"];
+  return ["計測中","live"];
+}
+function latestBucketTime(store){
+  const bs=buckets(store);return bs.length?Math.max(...bs.map(b=>+b.t||0)):null;
+}
+function spikeAlerts(store){
+  if(!store)return [];
+  const bs=buckets(store),now=Date.now();
+  const recent=bs.filter(b=>now-b.t<=5*60000);
+  const base=bs.filter(b=>now-b.t>5*60000&&now-b.t<=35*60000);
+  const sum=(arr,k)=>arr.reduce((a,b)=>a+(+b[k]||0),0);
+  const out=[];
+  ["reads","writes","deletes"].forEach(k=>{
+    const r=sum(recent,k)/Math.max(1,recent.length);
+    const b=sum(base,k)/Math.max(1,base.length);
+    if(base.length>=5 && r>=Math.max(5,b*3)){
+      out.push({type:"warn",text:`${k.toUpperCase()} が直前平均の約 ${Math.max(1,Math.round(r/Math.max(.01,b)))} 倍`});
+    }
+  });
+  return out;
+}
+function quotaAlerts(s){
+  const out=[];
+  Object.entries(LIMITS).forEach(([k,lim])=>{
+    const p=pct(s[k],lim);
+    if(p>=95)out.push({type:"danger",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 上限間近`});
+    else if(p>=80)out.push({type:"warn",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 注意域`});
+  });
+  return out;
+}
+function drawChart(canvas,store,range){
+  const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1;
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));
+  ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+  const now=Date.now(), today=ptDateKey(now);
+  let bs=buckets(store).filter(b=>{
+    if(range==="hour")return now-b.t<=3600000;
+    if(range==="day24")return now-b.t<=86400000;
+    if(range==="week")return now-b.t<=604800000;
+    return ptDateKey(Number(b.t))===today;
+  });
+  if(!bs.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No telemetry",10,h/2);return}
+  const vals=bs.map(b=>(+b.reads||0)+(+b.writes||0)+(+b.deletes||0));
+  const max=Math.max(1,...vals);
+  ctx.strokeStyle="#263741";ctx.lineWidth=1;
+  [0.25,0.5,0.75].forEach(f=>{ctx.beginPath();ctx.moveTo(0,h*f);ctx.lineTo(w,h*f);ctx.stroke()});
+  ctx.strokeStyle="#5aa4c8";ctx.lineWidth=2;ctx.beginPath();
+  bs.forEach((b,i)=>{
+    const x=bs.length===1?w/2:(i/(bs.length-1))*w;
+    const y=h-5-(vals[i]/max)*(h-10);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });ctx.stroke();
+}
+function metricHtml(label,val,lim,quotaMode){
+  const p=quotaMode?pct(val,lim):0,sev=severity(p);
+  return `<div class="metric">
+    <div class="label">${label}</div><div class="value">${fmt(val)}</div>
+    <div class="pct">${quotaMode?p.toFixed(1)+"% of daily free tier":"selected range"}</div>
+    <div class="bar"><div class="fill ${sev}" style="width:${quotaMode?Math.min(100,p):0}%"></div></div>
+  </div>`;
+}
+function cardHtml(app,store){
+  const s=sumFor(store,selectedRange),qs=sumFor(store,"quotaDayPT");
+  const [st,cls]=statusFor(store);
+  const latest=latestBucketTime(store);
+  const alerts=[...quotaAlerts(qs),...spikeAlerts(store)];
+  return `<section class="card" data-app="${app.id}">
+    <div class="card-head"><div><div class="name">${app.name}</div><div class="env">${app.env}</div></div>
+      <span class="status ${cls}">${st}</span></div>
+    ${store?`
+      <div class="metrics">
+        ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
+        ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
+        ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
+      </div>
+      <div class="chart-wrap"><div class="chart-head"><span class="chart-title">Activity · ${rangeLabel(selectedRange)}</span><span class="chart-title">R+W+D / min</span></div><canvas></canvas></div>
+      <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
+      <div class="meta"><span>Telemetry ${store.version}</span><span>最終記録 ${latest?new Date(latest).toLocaleTimeString("ja-JP"):"—"}</span></div>
+    `:`<div class="empty-message">Telemetry v0.2 未導入<br>stable移植後に自動表示</div>`}
+  </section>`;
+}
+function rangeLabel(r){return ({hour:"1時間",day24:"24時間",week:"1週間",quotaDayPT:"PT当日"})[r]||r}
+function render(){
+  const stores=new Map(APPS.map(a=>[a.id,loadStore(a.key)]));
+  document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(a=>cardHtml(a,stores.get(a.id))).join("");
+  document.getElementById("devGrid").innerHTML=APPS.filter(a=>a.group==="dev").map(a=>cardHtml(a,stores.get(a.id))).join("");
+  let src=0,total={reads:0,writes:0,deletes:0};
+  APPS.forEach(a=>{const st=stores.get(a.id);if(st){src++;const s=sumFor(st,selectedRange);total.reads+=s.reads;total.writes+=s.writes;total.deletes+=s.deletes}});
+  document.getElementById("sumSources").textContent=`${src} / 4`;
+  document.getElementById("sumReads").textContent=fmt(total.reads);
+  document.getElementById("sumWrites").textContent=fmt(total.writes);
+  document.getElementById("sumDeletes").textContent=fmt(total.deletes);
+  document.getElementById("ptDate").textContent=`PT quota day ${ptDateKey(Date.now())}`;
+  document.querySelectorAll(".card[data-app]").forEach(card=>{
+    const app=APPS.find(a=>a.id===card.dataset.app),canvas=card.querySelector("canvas");
+    if(canvas)drawChart(canvas,stores.get(app.id),selectedRange);
+  });
+}
+document.getElementById("rangeSeg").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-range]");if(!b)return;
+  selectedRange=b.dataset.range;
+  document.querySelectorAll("#rangeSeg button").forEach(x=>x.classList.toggle("active",x===b));
+  render();
+});
+document.getElementById("refreshBtn").addEventListener("click",render);
+window.addEventListener("resize",()=>setTimeout(render,60));
+render();
+setInterval(render,5000);
+</script>
+</body>
+</html>
