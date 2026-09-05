@@ -88,9 +88,9 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
 .lw{color:var(--chart-write)}.lw:before{background:var(--chart-write)}
 .ld{color:var(--chart-delete)}.ld:before{background:var(--chart-delete)}
 
-.brand-logo{display:block;width:min(480px,100%);height:auto;object-fit:contain}
+.brand-logo{display:block;width:min(200px,100%);height:auto;object-fit:contain}
 .brand-logo-wrap{display:flex;align-items:center;min-width:0;flex:1}
-@media(max-width:420px){.brand-logo{width:100%}}
+@media(max-width:180px){.brand-logo{width:100%}}
 .chart-wrap canvas{height:190px}
 </style>
 
@@ -277,6 +277,44 @@ function isRecentPtBucket(date,bucket,minutes){
     if(d===date&&b===bucket)return true;
   }return false;
 }
+function ptBucketToDate(datePT,bucket){
+  const [y,m,d]=datePT.split("-").map(Number);
+  const hh=Number(bucket.slice(0,2));
+  const mm=Number(bucket.slice(2));
+
+  // まず仮のUTC日時を作る
+  let utc=Date.UTC(y,m-1,d,hh,mm);
+
+  // その瞬間のLos Angelesでの表示日時を取得
+  const fmt=new Intl.DateTimeFormat("en-US",{
+    timeZone:"America/Los_Angeles",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+    hourCycle:"h23"
+  });
+
+  // PT表示と目的のPT日時との差を使ってUTCを補正
+  for(let i=0;i<2;i++){
+    const p=Object.fromEntries(
+      fmt.formatToParts(new Date(utc))
+        .filter(x=>x.type!=="literal")
+        .map(x=>[x.type,x.value])
+    );
+
+    const shown=Date.UTC(
+      +p.year,+p.month-1,+p.day,+p.hour,+p.minute
+    );
+
+    const wanted=Date.UTC(y,m-1,d,hh,mm);
+    utc+=wanted-shown;
+  }
+
+  return new Date(utc);
+}
+
 function seriesForApp(id,range){
   const docs=docsForApp(id),pts=[];
   docs.forEach(d=>{
@@ -340,9 +378,25 @@ function drawChart(canvas,id){
   for(let i=0;i<tickCount;i++){
     const idx=tickCount===1?0:Math.round(i*(pts.length-1)/(tickCount-1));
     const x=pts.length===1?L+pw/2:L+idx/(pts.length-1)*pw;
-    const key=pts[idx].key, parts=key.split(" "), bucket=parts[1]||"";
-    const label=bucket.length===4?bucket.slice(0,2)+":"+bucket.slice(2):bucket;
-    ctx.fillText(label,x,T+ph+7);
+    const key=pts[idx].key;
+const parts=key.split(" ");
+const datePT=parts[0]||"";
+const bucket=parts[1]||"";
+
+let label=bucket;
+
+if(datePT && bucket.length===4){
+  const dt=ptBucketToDate(datePT,bucket);
+
+  label=new Intl.DateTimeFormat("ja-JP",{
+    timeZone:"Asia/Tokyo",
+    hour:"2-digit",
+    minute:"2-digit",
+    hour12:false
+  }).format(dt);
+}
+
+ctx.fillText(label,x,T+ph+7);
   }
   const c=getComputedStyle(document.documentElement);
   [["reads",c.getPropertyValue("--chart-read").trim()],["writes",c.getPropertyValue("--chart-write").trim()],["deletes",c.getPropertyValue("--chart-delete").trim()]].forEach(([key,color])=>{
