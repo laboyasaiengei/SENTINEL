@@ -79,6 +79,14 @@ canvas{width:100%;height:96px;display:block}
 .summary .v{font-size:18px;font-weight:800;margin-top:3px}
 footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-size:10px;line-height:1.5}
 @media(max-width:760px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,1fr)}.metric .value{font-size:18px}}
+
+:root{--chart-read:#5aa4c8;--chart-write:#d5a84b;--chart-delete:#d86d6d}
+.metric .limit{margin-top:4px;font-size:10px;color:#71838d}
+.chart-legend{display:flex;gap:10px;font-size:10px;font-weight:800}
+.chart-legend span:before{content:"";display:inline-block;width:13px;height:2px;margin-right:4px;vertical-align:middle}
+.lr{color:var(--chart-read)}.lr:before{background:var(--chart-read)}
+.lw{color:var(--chart-write)}.lw:before{background:var(--chart-write)}
+.ld{color:var(--chart-delete)}.ld:before{background:var(--chart-delete)}
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -119,9 +127,6 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
 
   <div class="summary">
     <div class="box"><div class="k">接続データ源</div><div class="v" id="sumSources">0 / 4</div></div>
-    <div class="box"><div class="k">合計 Reads</div><div class="v" id="sumReads">0</div></div>
-    <div class="box"><div class="k">合計 Writes</div><div class="v" id="sumWrites">0</div></div>
-    <div class="box"><div class="k">合計 Deletes</div><div class="v" id="sumDeletes">0</div></div>
   </div>
 
   <div class="section-title">PRODUCTION</div>
@@ -265,16 +270,14 @@ function isRecentPtBucket(date,bucket,minutes){
 function seriesForApp(id,range){
   const docs=docsForApp(id),pts=[];
   docs.forEach(d=>{
-    Object.keys(d).forEach(k=>{
-      const m=/^r_(\d{4})$/.exec(k);if(!m)return;
-      const b=m[1],key=`${d.datePT} ${b}`;
-      const v=(+d[`r_${b}`]||0)+(+d[`w_${b}`]||0)+(+d[`d_${b}`]||0);
-      if(range==="hour"&&!isRecentPtBucket(d.datePT,b,70))return;
-      pts.push({key,v});
+    const buckets=new Set();
+    Object.keys(d).forEach(k=>{const m=/^[rwd]_(\d{4})$/.exec(k);if(m)buckets.add(m[1]);});
+    buckets.forEach(bucket=>{
+      if(range==="hour"&&!isRecentPtBucket(d.datePT,bucket,70))return;
+      pts.push({key:`${d.datePT} ${bucket}`,reads:+d[`r_${bucket}`]||0,writes:+d[`w_${bucket}`]||0,deletes:+d[`d_${bucket}`]||0});
     });
   });
-  pts.sort((a,b)=>a.key.localeCompare(b.key));
-  return pts;
+  pts.sort((a,b)=>a.key.localeCompare(b.key)); return pts;
 }
 function fmt(n){return Number(n||0).toLocaleString("ja-JP")}
 function pct(n,lim){return Math.min(999,(n/lim)*100)}
@@ -293,6 +296,7 @@ function metricHtml(label,val,lim,quotaMode){
   const p=quotaMode?pct(val,lim):0,sev=severity(p);
   return `<div class="metric"><div class="label">${label}</div><div class="value">${fmt(val)}</div>
   <div class="pct">${quotaMode?p.toFixed(1)+"% of daily free tier":"selected range"}</div>
+  <div class="limit">1日上限 ${fmt(lim)}</div>
   <div class="bar"><div class="fill ${sev}" style="width:${quotaMode?Math.min(100,p):0}%"></div></div></div>`;
 }
 function quotaAlerts(s){
@@ -307,10 +311,13 @@ function drawChart(canvas,id){
   canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));ctx.scale(dpr,dpr);
   ctx.clearRect(0,0,w,h);const pts=seriesForApp(id,selectedRange);
   if(!pts.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No shared telemetry",10,h/2);return}
-  const vals=pts.map(x=>x.v),max=Math.max(1,...vals);
+  const max=Math.max(1,...pts.flatMap(p=>[p.reads,p.writes,p.deletes]));
   ctx.strokeStyle="#263741";ctx.lineWidth=1;[.25,.5,.75].forEach(f=>{ctx.beginPath();ctx.moveTo(0,h*f);ctx.lineTo(w,h*f);ctx.stroke()});
-  ctx.strokeStyle="#5aa4c8";ctx.lineWidth=2;ctx.beginPath();
-  pts.forEach((p,i)=>{const x=pts.length===1?w/2:(i/(pts.length-1))*w,y=h-5-(p.v/max)*(h-10);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+  const c=getComputedStyle(document.documentElement);
+  [["reads",c.getPropertyValue("--chart-read").trim()],["writes",c.getPropertyValue("--chart-write").trim()],["deletes",c.getPropertyValue("--chart-delete").trim()]].forEach(([key,color])=>{
+    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();
+    pts.forEach((p,i)=>{const x=pts.length===1?w/2:i/(pts.length-1)*w,y=h-5-p[key]/max*(h-10);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+  });
 }
 function cardHtml(app){
   const s=sumApp(app.id,selectedRange),qs=sumApp(app.id,"quotaDayPT"),[st,cls]=statusFor(app.id),last=latestSeen(app.id);
@@ -321,7 +328,7 @@ function cardHtml(app){
       ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
       ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
       ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
-    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">Shared Activity · ${rangeLabel(selectedRange)}</span><span class="chart-title">R+W+D / 10min</span></div><canvas></canvas></div>
+    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">Shared Activity · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
     <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
     <div class="meta"><span>Shared v0.3</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
@@ -333,7 +340,6 @@ function render(){
   let src=0,total={reads:0,writes:0,deletes:0};
   APPS.forEach(a=>{if(docsForApp(a.id).length){src++;const s=sumApp(a.id,selectedRange);total.reads+=s.reads;total.writes+=s.writes;total.deletes+=s.deletes}});
   document.getElementById("sumSources").textContent=`${src} / 4`;
-  document.getElementById("sumReads").textContent=fmt(total.reads);document.getElementById("sumWrites").textContent=fmt(total.writes);document.getElementById("sumDeletes").textContent=fmt(total.deletes);
   document.getElementById("ptDate").textContent=`PT quota day ${ptDateKey(Date.now())}`;
   document.getElementById("liveBadge").textContent=lastRemoteError?"SHARED ERROR":"SHARED FIRESTORE";
   document.querySelectorAll(".card[data-app]").forEach(c=>{const cv=c.querySelector("canvas");if(cv)drawChart(cv,c.dataset.app)});
@@ -349,7 +355,7 @@ document.getElementById("rangeSeg").addEventListener("click",async e=>{
 });
 document.getElementById("refreshBtn").addEventListener("click",refresh);
 window.addEventListener("resize",()=>setTimeout(render,60));
-document.querySelector(".notice").innerHTML="v0.2 SHARED：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
+document.querySelector(".notice").innerHTML="v0.3 SHARED UI：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
 </script>
