@@ -87,19 +87,29 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
 .lr{color:var(--chart-read)}.lr:before{background:var(--chart-read)}
 .lw{color:var(--chart-write)}.lw:before{background:var(--chart-write)}
 .ld{color:var(--chart-delete)}.ld:before{background:var(--chart-delete)}
+
+.brand-logo{display:block;width:min(720px,100%);height:auto;object-fit:contain}
+.brand-logo-wrap{display:flex;align-items:center;min-width:0;flex:1}
+@media(max-width:700px){.brand-logo{width:100%}}
+.chart-wrap canvas{height:190px}
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
+
+<link rel="apple-touch-icon" href="icons/home-icon.png">
+<link rel="icon" type="image/png" href="icons/home-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SENTINEL">
 </head>
 <body>
 <header>
   <div class="header-inner">
     <div class="brand-row">
-      <div class="brand">
-        <div class="logo">S</div>
-        <div><h1>SENTINEL</h1><div class="sub">ATLAS / CAESAR local telemetry monitor</div></div>
+      <div class="brand-logo-wrap"><img class="brand-logo" src="icons/logo.png" alt="SENTINEL 運用監視・早期警戒システム"></div>
+</div>
       </div>
       <div class="header-right">
         <span id="ptDate" class="pill">PT quota day —</span>
@@ -310,13 +320,38 @@ function drawChart(canvas,id){
   const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
   canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));ctx.scale(dpr,dpr);
   ctx.clearRect(0,0,w,h);const pts=seriesForApp(id,selectedRange);
-  if(!pts.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No shared telemetry",10,h/2);return}
-  const max=Math.max(1,...pts.flatMap(p=>[p.reads,p.writes,p.deletes]));
-  ctx.strokeStyle="#263741";ctx.lineWidth=1;[.25,.5,.75].forEach(f=>{ctx.beginPath();ctx.moveTo(0,h*f);ctx.lineTo(w,h*f);ctx.stroke()});
+  const L=46,R=8,T=10,B=28,pw=Math.max(1,w-L-R),ph=Math.max(1,h-T-B);
+  if(!pts.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No shared telemetry",L+10,T+ph/2);return}
+  const rawMax=Math.max(1,...pts.flatMap(p=>[p.reads,p.writes,p.deletes]));
+  const pow=Math.pow(10,Math.floor(Math.log10(rawMax)));
+  const n=rawMax/pow;
+  const nice=(n<=1?1:n<=2?2:n<=5?5:10)*pow;
+  const ymax=Math.max(4,nice);
+  ctx.font="10px sans-serif";ctx.textBaseline="middle";
+  for(let i=0;i<=4;i++){
+    const val=Math.round(ymax*(4-i)/4),y=T+ph*i/4;
+    ctx.strokeStyle=i===4?"#52636d":"#263741";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();
+    ctx.fillStyle="#71838d";ctx.textAlign="right";ctx.fillText(val.toLocaleString("ja-JP"),L-6,y);
+  }
+  ctx.strokeStyle="#52636d";ctx.beginPath();ctx.moveTo(L,T);ctx.lineTo(L,T+ph);ctx.lineTo(L+pw,T+ph);ctx.stroke();
+  const tickCount=Math.min(5,pts.length);
+  ctx.textAlign="center";ctx.textBaseline="top";ctx.fillStyle="#71838d";
+  for(let i=0;i<tickCount;i++){
+    const idx=tickCount===1?0:Math.round(i*(pts.length-1)/(tickCount-1));
+    const x=pts.length===1?L+pw/2:L+idx/(pts.length-1)*pw;
+    const key=pts[idx].key, parts=key.split(" "), bucket=parts[1]||"";
+    const label=bucket.length===4?bucket.slice(0,2)+":"+bucket.slice(2):bucket;
+    ctx.fillText(label,x,T+ph+7);
+  }
   const c=getComputedStyle(document.documentElement);
   [["reads",c.getPropertyValue("--chart-read").trim()],["writes",c.getPropertyValue("--chart-write").trim()],["deletes",c.getPropertyValue("--chart-delete").trim()]].forEach(([key,color])=>{
     ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();
-    pts.forEach((p,i)=>{const x=pts.length===1?w/2:i/(pts.length-1)*w,y=h-5-p[key]/max*(h-10);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+    pts.forEach((p,i)=>{
+      const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
+      const y=T+ph-(p[key]/ymax)*ph;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    });ctx.stroke();
   });
 }
 function cardHtml(app){
@@ -328,7 +363,7 @@ function cardHtml(app){
       ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
       ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
       ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
-    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">Shared Activity · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
+    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">Operations / 10min · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
     <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
     <div class="meta"><span>Shared v0.3</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
@@ -355,7 +390,7 @@ document.getElementById("rangeSeg").addEventListener("click",async e=>{
 });
 document.getElementById("refreshBtn").addEventListener("click",refresh);
 window.addEventListener("resize",()=>setTimeout(render,60));
-document.querySelector(".notice").innerHTML="v0.3 SHARED UI：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
+document.querySelector(".notice").innerHTML="v0.4 SHARED UI：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
 </script>
