@@ -160,7 +160,7 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 </main>
 
 <footer>
-  SENTINEL v0.9 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
+  SENTINEL v1.0 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
   Production telemetry keys are reserved but will remain「未導入」until ATLAS / CAESAR stable receive Telemetry v0.2.
 </footer>
 
@@ -197,7 +197,8 @@ function ptDateKey(ts){
 }
 function ptDateKeysForRange(range){
   const out=[];
-  const now=Date.now(),days=range==="week"?8:range==="day24"?2:1;
+  // 1hもPT 0:00を跨ぐ可能性があるため、前日docまで取得する。
+  const now=Date.now(),days=range==="week"?8:(range==="day24"||range==="hour")?2:1;
   for(let i=0;i<days;i++)out.push(ptDateKey(now-i*24*60*60*1000));
   return [...new Set(out)];
 }
@@ -375,16 +376,58 @@ function seriesForApp(id,range){
     return days;
   }
 
-  let startTs,endTs=minuteFloor(now);
-  if(range==="hour")startTs=endTs-59*60000;
-  else if(range==="day24")startTs=endTs-(24*60-1)*60000;
-  else{
+  const endMinute=minuteFloor(now);
+
+  if(range==="hour"){
+    const startTs=endMinute-59*60000;
+    for(let ts=startTs;ts<=endMinute;ts+=60000){
+      const p=map.get(ts);
+      pts.push(p||{ts,reads:0,writes:0,deletes:0});
+    }
+    return pts;
+  }
+
+  // 24h / PT当日：Shared Firestoreには1分粒度のまま保存し、
+  // ダッシュボード描画時だけJSTの1時間単位へ合算する。
+  let startTs;
+  if(range==="day24"){
+    startTs=endMinute-24*60*60000+60000;
+  }else{
     const today=ptDateKey(now);
     startTs=minuteFloor(ptBucketToDate(today,"0000").getTime());
   }
-  for(let ts=startTs;ts<=endTs;ts+=60000){
-    const p=map.get(ts);
-    pts.push(p||{ts,reads:0,writes:0,deletes:0});
+
+  const hourMap=new Map();
+  map.forEach(p=>{
+    if(p.ts<startTs || p.ts>endMinute)return;
+    const d=new Date(p.ts);
+    const parts=new Intl.DateTimeFormat("en-US",{
+      timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",
+      hour:"2-digit",hourCycle:"h23"
+    }).formatToParts(d);
+    const g=t=>parts.find(x=>x.type===t)?.value||"";
+    const key=`${g("year")}-${g("month")}-${g("day")} ${g("hour")}`;
+    let h=hourMap.get(key);
+    if(!h){
+      // JSTはUTC+9固定。ラベル位置用にそのJST時刻をUTCへ戻す。
+      const ts=Date.UTC(+g("year"),+g("month")-1,+g("day"),+g("hour")-9,0);
+      h={key,ts,reads:0,writes:0,deletes:0};
+      hourMap.set(key,h);
+    }
+    h.reads+=p.reads; h.writes+=p.writes; h.deletes+=p.deletes;
+  });
+
+  // 空時間も0で埋め、折れ線の時間軸を連続させる。
+  const startHour=Math.floor(startTs/3600000)*3600000;
+  const endHour=Math.floor(endMinute/3600000)*3600000;
+  for(let ts=startHour;ts<=endHour;ts+=3600000){
+    const parts=new Intl.DateTimeFormat("en-US",{
+      timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",
+      hour:"2-digit",hourCycle:"h23"
+    }).formatToParts(new Date(ts));
+    const g=t=>parts.find(x=>x.type===t)?.value||"";
+    const key=`${g("year")}-${g("month")}-${g("day")} ${g("hour")}`;
+    pts.push(hourMap.get(key)||{key,ts,reads:0,writes:0,deletes:0});
   }
   return pts;
 }
@@ -492,45 +535,29 @@ if(selectedRange==="week"){
     ["writes",c.getPropertyValue("--chart-write").trim()],
     ["deletes",c.getPropertyValue("--chart-delete").trim()]
   ];
-  const barMode=selectedRange==="day24"||selectedRange==="quotaDayPT";
 
-  if(barMode){
-    // 24時間 / PT当日は、散発的な1分イベントを線で結ばず棒として表示する。
-    // 1分粒度そのものは維持し、同じ分に複数系列がある場合は横並びにする。
-    const step=pts.length>1?pw/(pts.length-1):pw;
-    const groupW=Math.max(1,Math.min(6,step*.92));
-    const barW=Math.max(.7,groupW/series.length);
-
-    series.forEach(([key,color],si)=>{
-      ctx.fillStyle=color;
-      pts.forEach((p,i)=>{
-        const val=p[key];
-        if(!val)return;
-        const cx=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
-        const bh=Math.max(1,(val/ymax)*ph);
-        const x=cx-groupW/2+si*barW;
-        ctx.fillRect(x,T+ph-bh,barW,bh);
-      });
+  // v1.0: 全レンジを折れ線で統一。
+  // 1h=1分、24h/PT当日=1時間、1week=1日。
+  series.forEach(([key,color])=>{
+    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.beginPath();
+    pts.forEach((p,i)=>{
+      const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
+      const y=T+ph-(p[key]/ymax)*ph;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
     });
-  }else{
-    // 1時間 / 1週間は従来どおり線グラフ。
-    series.forEach(([key,color])=>{
-      ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.beginPath();
+    ctx.stroke();
+
+    // 1時間集約/日集約では各点を軽く可視化。1分表示は線のみ。
+    if(selectedRange!=="hour"){
       pts.forEach((p,i)=>{
+        if(!p[key])return;
         const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
         const y=T+ph-(p[key]/ymax)*ph;
-        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+        ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill();
       });
-      ctx.stroke();
+    }
+  });
 
-      pts.forEach((p,i)=>{
-        if(selectedRange!=="week" && !p[key])return;
-        const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
-        const y=T+ph-(p[key]/ymax)*ph;
-        ctx.beginPath();ctx.arc(x,y,2.4,0,Math.PI*2);ctx.fill();
-      });
-    });
-  }
 }
 function cardHtml(app){
   const s=sumApp(app.id,selectedRange),qs=sumApp(app.id,"quotaDayPT"),[st,cls]=statusFor(app.id),last=latestSeen(app.id);
@@ -541,7 +568,7 @@ function cardHtml(app){
       ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
       ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
       ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
-    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${selectedRange==="week"?"Operations / day":(selectedRange==="day24"||selectedRange==="quotaDayPT")?"Operations / min · BAR":"Operations / min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
+    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${selectedRange==="week"?"Operations / day":(selectedRange==="day24"||selectedRange==="quotaDayPT")?"Operations / hour":"Operations / min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
     <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
     <div class="meta"><span>Shared v0.4 / 1min</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
@@ -565,7 +592,7 @@ document.getElementById("rangeSeg").addEventListener("click",async e=>{
 });
 document.getElementById("refreshBtn").addEventListener("click",refresh);
 window.addEventListener("resize",()=>setTimeout(render,60));
-document.querySelector(".notice").innerHTML="v0.7 SHARED UI：各アプリは1分粒度でTelemetryを記録し、10分ごとにまとめて共有Firestoreへ送信します。1時間は線、24時間・PT当日は棒、1週間は日別線で描画します。監視値はアプリ起因の推計値です。";
+document.querySelector(".notice").innerHTML="v1.0 SHARED UI：各アプリは1分粒度でTelemetryを記録し、10分ごとにまとめて共有Firestoreへ送信します。1時間は線、24時間・PT当日は棒、1週間は日別線で描画します。監視値はアプリ起因の推計値です。";
 
 // Keep the intentional white splash briefly visible, then fade to the dark dashboard.
 // This does not try to suppress iOS' native white launch frame; it visually connects to it.
