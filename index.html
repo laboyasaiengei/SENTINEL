@@ -417,20 +417,39 @@ function drawChart(canvas,id){
   ctx.strokeStyle="#52636d";ctx.beginPath();ctx.moveTo(L,T);ctx.lineTo(L,T+ph);ctx.lineTo(L+pw,T+ph);ctx.stroke();
 
   const tickIdx=[];
-  if(selectedRange==="week"){
-    for(let i=0;i<pts.length;i++)tickIdx.push(i);
-  }else{
-    // Data points are 1-minute resolution; labels are every 10 minutes.
-    pts.forEach((p,i)=>{
-      const parts=new Intl.DateTimeFormat("en-US",{
-        timeZone:"Asia/Tokyo",minute:"2-digit",hour:"2-digit",hour12:false
-      }).formatToParts(new Date(p.ts));
-      const mm=Number(parts.find(x=>x.type==="minute")?.value||0);
-      if(mm%10===0)tickIdx.push(i);
-    });
-    // Keep the newest point readable even when it is not exactly on a 10-minute boundary.
-    if(!tickIdx.length)tickIdx.push(pts.length-1);
-  }
+
+if(selectedRange==="week"){
+  // 1週間：1日ごと
+  for(let i=0;i<pts.length;i++) tickIdx.push(i);
+
+}else{
+  pts.forEach((p,i)=>{
+    const parts=new Intl.DateTimeFormat("en-US",{
+      timeZone:"Asia/Tokyo",
+      hour:"2-digit",
+      minute:"2-digit",
+      hour12:false
+    }).formatToParts(new Date(p.ts));
+
+    const hh=Number(parts.find(x=>x.type==="hour")?.value||0);
+    const mm=Number(parts.find(x=>x.type==="minute")?.value||0);
+
+    if(selectedRange==="hour"){
+      // 1時間：10分ごとに表示
+      if(mm%10===0) tickIdx.push(i);
+
+    }else if(selectedRange==="day24"){
+      // 24時間：2時間ごとに表示
+      if(mm===0 && hh%2===0) tickIdx.push(i);
+
+    }else if(selectedRange==="quotaDayPT"){
+      // PT当日：2時間ごとに表示
+      if(mm===0 && hh%2===0) tickIdx.push(i);
+    }
+  });
+
+  if(!tickIdx.length) tickIdx.push(pts.length-1);
+}
 
   ctx.textBaseline="top";ctx.fillStyle="#71838d";
   [...new Set(tickIdx)].forEach((idx,j,arr)=>{
