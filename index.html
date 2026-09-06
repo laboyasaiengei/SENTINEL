@@ -19,8 +19,8 @@ header{
   background:rgba(13,19,24,.94);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--line);
 }
-.header-inner{max-width:1180px;margin:auto;padding:14px 18px 12px}
-.brand-row{display:flex;align-items:center;gap:12px;justify-content:space-between}
+.header-inner{max-width:1180px;margin:auto;padding:20px 18px 12px}
+.brand-row{display:flex;align-items:flex-start;gap:12px;justify-content:space-between}
 .brand{display:flex;align-items:center;gap:10px}
 .logo{
   width:31px;height:31px;border:1px solid #416679;border-radius:8px;
@@ -29,7 +29,7 @@ header{
 }
 h1{font-size:19px;letter-spacing:.08em;margin:0}
 .sub{font-size:11px;color:var(--muted);margin-top:2px}
-.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
 .pill{border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:10px;color:var(--muted);background:#10191f}
 .pill.ok{color:#a4d9ba;border-color:#305b43}
 main{max-width:1180px;margin:0 auto;padding:16px 18px}
@@ -89,7 +89,7 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
 .ld{color:var(--chart-delete)}.ld:before{background:var(--chart-delete)}
 
 .brand-logo{display:block;width:min(200px,100%);height:auto;object-fit:contain}
-.brand-logo-wrap{display:flex;align-items:center;min-width:0;flex:1}
+.brand-logo-wrap{display:flex;align-items:center;min-width:0;flex:1;padding-top:7px}
 @media(max-width:180px){.brand-logo{width:100%}}
 .chart-wrap canvas{height:190px}
 </style>
@@ -109,11 +109,9 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
   <div class="header-inner">
     <div class="brand-row">
       <div class="brand-logo-wrap"><img class="brand-logo" src="icons/logo.png" alt="SENTINEL 運用監視・早期警戒システム"></div>
-</div>
-      </div>
       <div class="header-right">
         <span id="ptDate" class="pill">PT quota day —</span>
-        <span id="liveBadge" class="pill ok">LOCAL ONLY</span>
+        <span id="liveBadge" class="pill ok">接続準備中</span>
       </div>
     </div>
   </div>
@@ -134,12 +132,7 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
     </div>
     <button class="ghost" id="refreshBtn">↻ 再読込</button>
   </div>
-
-  <div class="summary">
-    <div class="box"><div class="k">接続データ源</div><div class="v" id="sumSources">0 / 4</div></div>
-  </div>
-
-  <div class="section-title">PRODUCTION</div>
+<div class="section-title">PRODUCTION</div>
   <div class="grid" id="prodGrid"></div>
 
   <div class="section-title">DEVELOPMENT</div>
@@ -147,7 +140,7 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
 </main>
 
 <footer>
-  SENTINEL v0.1 LOCAL · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
+  SENTINEL v0.5 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
   Production telemetry keys are reserved but will remain「未導入」until ATLAS / CAESAR stable receive Telemetry v0.2.
 </footer>
 
@@ -188,8 +181,16 @@ function ptDateKeysForRange(range){
   for(let i=0;i<days;i++)out.push(ptDateKey(now-i*24*60*60*1000));
   return [...new Set(out)];
 }
+async function waitForFirebase(timeoutMs=12000){
+  const start=Date.now();
+  while(typeof window.firebase==="undefined"){
+    if(Date.now()-start>timeoutMs)throw new Error("Firebase SDK load timeout");
+    await new Promise(r=>setTimeout(r,50));
+  }
+}
 async function initShared(){
   if(sharedApp)return;
+  await waitForFirebase();
   sharedApp=firebase.initializeApp(SHARED_CONFIG,"sentinel-dashboard-shared");
   sharedAuth=sharedApp.auth();
   sharedAppCheck=sharedApp.appCheck();
@@ -315,17 +316,59 @@ function ptBucketToDate(datePT,bucket){
   return new Date(utc);
 }
 
-function seriesForApp(id,range){
-  const docs=docsForApp(id),pts=[];
-  docs.forEach(d=>{
+function tenMinFloor(ts){return Math.floor(ts/600000)*600000}
+function rawPointMap(id){
+  const map=new Map();
+  docsForApp(id).forEach(d=>{
     const buckets=new Set();
     Object.keys(d).forEach(k=>{const m=/^[rwd]_(\d{4})$/.exec(k);if(m)buckets.add(m[1]);});
     buckets.forEach(bucket=>{
-      if(range==="hour"&&!isRecentPtBucket(d.datePT,bucket,70))return;
-      pts.push({key:`${d.datePT} ${bucket}`,reads:+d[`r_${bucket}`]||0,writes:+d[`w_${bucket}`]||0,deletes:+d[`d_${bucket}`]||0});
+      const dt=ptBucketToDate(d.datePT,bucket);
+      const ts=tenMinFloor(dt.getTime());
+      map.set(ts,{
+        ts,
+        reads:+d[`r_${bucket}`]||0,
+        writes:+d[`w_${bucket}`]||0,
+        deletes:+d[`d_${bucket}`]||0
+      });
     });
   });
-  pts.sort((a,b)=>a.key.localeCompare(b.key)); return pts;
+  return map;
+}
+function jstDateKey(ts){
+  const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(ts));
+  const g=t=>p.find(x=>x.type===t)?.value||"";
+  return `${g("year")}-${g("month")}-${g("day")}`;
+}
+function seriesForApp(id,range){
+  const map=rawPointMap(id),now=Date.now(),pts=[];
+  if(range==="week"){
+    const days=[];
+    for(let i=6;i>=0;i--){
+      const t=now-i*86400000,key=jstDateKey(t);
+      if(!days.some(x=>x.key===key))days.push({key,ts:t,reads:0,writes:0,deletes:0});
+    }
+    const byDay=new Map(days.map(x=>[x.key,x]));
+    map.forEach(p=>{
+      const key=jstDateKey(p.ts),d=byDay.get(key);
+      if(d){d.reads+=p.reads;d.writes+=p.writes;d.deletes+=p.deletes}
+    });
+    return days;
+  }
+
+  let startTs,endTs=tenMinFloor(now);
+  if(range==="hour")startTs=endTs-60*60000;
+  else if(range==="day24")startTs=endTs-24*60*60000;
+  else{
+    const today=ptDateKey(now);
+    const midnight=ptBucketToDate(today,"0000").getTime();
+    startTs=tenMinFloor(midnight);
+  }
+  for(let ts=startTs;ts<=endTs;ts+=600000){
+    const p=map.get(ts);
+    pts.push(p||{ts,reads:0,writes:0,deletes:0});
+  }
+  return pts;
 }
 function fmt(n){return Number(n||0).toLocaleString("ja-JP")}
 function pct(n,lim){return Math.min(999,(n/lim)*100)}
@@ -357,14 +400,15 @@ function rangeLabel(r){return ({hour:"1時間",day24:"24時間",week:"1週間",q
 function drawChart(canvas,id){
   const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
   canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));ctx.scale(dpr,dpr);
-  ctx.clearRect(0,0,w,h);const pts=seriesForApp(id,selectedRange);
-  const L=46,R=8,T=10,B=28,pw=Math.max(1,w-L-R),ph=Math.max(1,h-T-B);
+  ctx.clearRect(0,0,w,h);
+  const pts=seriesForApp(id,selectedRange);
+  const L=46,R=34,T=10,B=30,pw=Math.max(1,w-L-R),ph=Math.max(1,h-T-B);
   if(!pts.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No shared telemetry",L+10,T+ph/2);return}
+
   const rawMax=Math.max(1,...pts.flatMap(p=>[p.reads,p.writes,p.deletes]));
-  const pow=Math.pow(10,Math.floor(Math.log10(rawMax)));
-  const n=rawMax/pow;
-  const nice=(n<=1?1:n<=2?2:n<=5?5:10)*pow;
-  const ymax=Math.max(4,nice);
+  const pow=Math.pow(10,Math.floor(Math.log10(rawMax))),n=rawMax/pow;
+  const nice=(n<=1?1:n<=2?2:n<=5?5:10)*pow,ymax=Math.max(4,nice);
+
   ctx.font="10px sans-serif";ctx.textBaseline="middle";
   for(let i=0;i<=4;i++){
     const val=Math.round(ymax*(4-i)/4),y=T+ph*i/4;
@@ -373,39 +417,49 @@ function drawChart(canvas,id){
     ctx.fillStyle="#71838d";ctx.textAlign="right";ctx.fillText(val.toLocaleString("ja-JP"),L-6,y);
   }
   ctx.strokeStyle="#52636d";ctx.beginPath();ctx.moveTo(L,T);ctx.lineTo(L,T+ph);ctx.lineTo(L+pw,T+ph);ctx.stroke();
-  const tickCount=Math.min(5,pts.length);
-  ctx.textAlign="center";ctx.textBaseline="top";ctx.fillStyle="#71838d";
-  for(let i=0;i<tickCount;i++){
-    const idx=tickCount===1?0:Math.round(i*(pts.length-1)/(tickCount-1));
-    const x=pts.length===1?L+pw/2:L+idx/(pts.length-1)*pw;
-    const key=pts[idx].key;
-const parts=key.split(" ");
-const datePT=parts[0]||"";
-const bucket=parts[1]||"";
 
-let label=bucket;
-
-if(datePT && bucket.length===4){
-  const dt=ptBucketToDate(datePT,bucket);
-
-  label=new Intl.DateTimeFormat("ja-JP",{
-    timeZone:"Asia/Tokyo",
-    hour:"2-digit",
-    minute:"2-digit",
-    hour12:false
-  }).format(dt);
-}
-
-ctx.fillText(label,x,T+ph+7);
+  const tickIdx=[];
+  if(selectedRange==="hour"){
+    for(let i=0;i<pts.length;i++)tickIdx.push(i); // 10-minute labels
+  }else if(selectedRange==="week"){
+    for(let i=0;i<pts.length;i++)tickIdx.push(i); // daily labels
+  }else{
+    const count=5;
+    for(let i=0;i<count;i++)tickIdx.push(Math.round(i*(pts.length-1)/(count-1)));
   }
+
+  ctx.textBaseline="top";ctx.fillStyle="#71838d";
+  [...new Set(tickIdx)].forEach((idx,j,arr)=>{
+    const p=pts[idx],x=pts.length===1?L+pw/2:L+idx/(pts.length-1)*pw;
+    let label;
+    if(selectedRange==="week"){
+      const [y,m,d]=p.key.split("-");
+      label=`${+m}/${+d}`;
+    }else{
+      label=new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(p.ts));
+    }
+    ctx.textAlign=j===0?"left":j===arr.length-1?"right":"center";
+    const tx=j===0?Math.max(L,x):j===arr.length-1?Math.min(L+pw,x):x;
+    ctx.fillText(label,tx,T+ph+7);
+  });
+
   const c=getComputedStyle(document.documentElement);
   [["reads",c.getPropertyValue("--chart-read").trim()],["writes",c.getPropertyValue("--chart-write").trim()],["deletes",c.getPropertyValue("--chart-delete").trim()]].forEach(([key,color])=>{
-    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();
+    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.beginPath();
     pts.forEach((p,i)=>{
       const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
       const y=T+ph-(p[key]/ymax)*ph;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
-    });ctx.stroke();
+    });
+    ctx.stroke();
+
+    // Point markers. For dense 24h/PT views, mark non-zero points; for 1h/week mark every point.
+    pts.forEach((p,i)=>{
+      if((selectedRange==="day24"||selectedRange==="quotaDayPT") && !p[key])return;
+      const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
+      const y=T+ph-(p[key]/ymax)*ph;
+      ctx.beginPath();ctx.arc(x,y,2.4,0,Math.PI*2);ctx.fill();
+    });
   });
 }
 function cardHtml(app){
@@ -417,7 +471,7 @@ function cardHtml(app){
       ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
       ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
       ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
-    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">Operations / 10min · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
+    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${selectedRange==="week"?"Operations / day":"Operations / 10min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
     <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
     <div class="meta"><span>Shared v0.3</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
@@ -426,9 +480,6 @@ function cardHtml(app){
 function render(){
   document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(cardHtml).join("");
   document.getElementById("devGrid").innerHTML=APPS.filter(a=>a.group==="dev").map(cardHtml).join("");
-  let src=0,total={reads:0,writes:0,deletes:0};
-  APPS.forEach(a=>{if(docsForApp(a.id).length){src++;const s=sumApp(a.id,selectedRange);total.reads+=s.reads;total.writes+=s.writes;total.deletes+=s.deletes}});
-  document.getElementById("sumSources").textContent=`${src} / 4`;
   document.getElementById("ptDate").textContent=`PT quota day ${ptDateKey(Date.now())}`;
   document.getElementById("liveBadge").textContent=lastRemoteError?"SHARED ERROR":"SHARED FIRESTORE";
   document.querySelectorAll(".card[data-app]").forEach(c=>{const cv=c.querySelector("canvas");if(cv)drawChart(cv,c.dataset.app)});
@@ -444,7 +495,7 @@ document.getElementById("rangeSeg").addEventListener("click",async e=>{
 });
 document.getElementById("refreshBtn").addEventListener("click",refresh);
 window.addEventListener("resize",()=>setTimeout(render,60));
-document.querySelector(".notice").innerHTML="v0.4 SHARED UI：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
+document.querySelector(".notice").innerHTML="v0.5 SHARED UI：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
 </script>
