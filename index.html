@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1318">
 <title>SENTINEL</title>
 <style>
 :root{
@@ -98,14 +99,18 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
   position:fixed;inset:0;z-index:9999;background:#fff;
   display:flex;align-items:center;justify-content:center;
   opacity:1;visibility:visible;
-  transition:opacity .85s cubic-bezier(.22,.61,.36,1),visibility 0s linear .85s;
+  transition:background-color .72s cubic-bezier(.4,0,.2,1),opacity .58s ease .36s,visibility 0s linear .96s;
 }
 #sentinelSplash img{
   width:min(300px,68vw);height:auto;display:block;
-  /* Keep the supplied SENTINEL logo exactly as authored. */
+  opacity:1;transform:scale(1);
+  transition:opacity .58s ease .18s,transform .78s cubic-bezier(.22,.61,.36,1);
 }
-#sentinelSplash.hide{opacity:0;visibility:hidden;pointer-events:none}
+#sentinelSplash.depart{background:#0d1318;opacity:0;visibility:hidden;pointer-events:none}
+#sentinelSplash.depart img{opacity:0;transform:scale(.985)}
 body.sentinel-booting{overflow:hidden}
+body.sentinel-booting > header,body.sentinel-booting > main,body.sentinel-booting > footer{opacity:0}
+body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -155,7 +160,7 @@ body.sentinel-booting{overflow:hidden}
 </main>
 
 <footer>
-  SENTINEL v0.7 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
+  SENTINEL v0.9 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
   Production telemetry keys are reserved but will remain「未導入」until ATLAS / CAESAR stable receive Telemetry v0.2.
 </footer>
 
@@ -566,14 +571,12 @@ document.querySelector(".notice").innerHTML="v0.7 SHARED UI：各アプリは1�
 // This does not try to suppress iOS' native white launch frame; it visually connects to it.
 window.addEventListener("load",()=>{
   const splash=document.getElementById("sentinelSplash");
-  const started=performance.now();
-  const MIN_SPLASH_MS=900;
-  const finish=()=>{
-    if(splash)splash.classList.add("hide");
+  const MIN_SPLASH_MS=850;
+  setTimeout(()=>{
+    splash?.classList.add("depart");
     document.body.classList.remove("sentinel-booting");
-    setTimeout(()=>splash?.remove(),920);
-  };
-  setTimeout(finish,Math.max(0,MIN_SPLASH_MS-(performance.now()-started)));
+    setTimeout(()=>splash?.remove(),1050);
+  },MIN_SPLASH_MS);
 },{once:true});
 
 refresh();
