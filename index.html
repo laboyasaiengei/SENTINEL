@@ -98,12 +98,11 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
   position:fixed;inset:0;z-index:9999;background:#fff;
   display:flex;align-items:center;justify-content:center;
   opacity:1;visibility:visible;
-  transition:opacity .32s ease,visibility 0s linear .32s;
+  transition:opacity .85s cubic-bezier(.22,.61,.36,1),visibility 0s linear .85s;
 }
 #sentinelSplash img{
   width:min(300px,68vw);height:auto;display:block;
-  /* Header logo is designed for the dark UI; make it readable on the intentional white splash. */
-  filter:invert(1);
+  /* Keep the supplied SENTINEL logo exactly as authored. */
 }
 #sentinelSplash.hide{opacity:0;visibility:hidden;pointer-events:none}
 body.sentinel-booting{overflow:hidden}
@@ -568,11 +567,11 @@ document.querySelector(".notice").innerHTML="v0.7 SHARED UI：各アプリは1�
 window.addEventListener("load",()=>{
   const splash=document.getElementById("sentinelSplash");
   const started=performance.now();
-  const MIN_SPLASH_MS=300;
+  const MIN_SPLASH_MS=900;
   const finish=()=>{
     if(splash)splash.classList.add("hide");
     document.body.classList.remove("sentinel-booting");
-    setTimeout(()=>splash?.remove(),380);
+    setTimeout(()=>splash?.remove(),920);
   };
   setTimeout(finish,Math.max(0,MIN_SPLASH_MS-(performance.now()-started)));
 },{once:true});
