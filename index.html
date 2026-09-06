@@ -140,7 +140,7 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
 </main>
 
 <footer>
-  SENTINEL v0.5 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
+  SENTINEL v0.6 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
   Production telemetry keys are reserved but will remain「未導入」until ATLAS / CAESAR stable receive Telemetry v0.2.
 </footer>
 
@@ -240,43 +240,48 @@ async function fetchShared(){
   return docs;
 }
 function docsForApp(id){return remoteDocs.filter(d=>d.appId===id)}
+function telemetryFieldsForDoc(d){
+  const out=[];
+  Object.keys(d).forEach(k=>{
+    const m=/^(r1|w1|d1|r|w|d)_(\d{4})$/.exec(k);
+    if(!m)return;
+    out.push({kind:m[1],bucket:m[2],value:+d[k]||0});
+  });
+  return out;
+}
+function metricKind(kind){
+  if(kind==="r"||kind==="r1")return "reads";
+  if(kind==="w"||kind==="w1")return "writes";
+  return "deletes";
+}
+function inSelectedRange(ts,range){
+  const now=Date.now();
+  if(range==="hour")return ts>=now-60*60*1000 && ts<=now+60000;
+  if(range==="day24")return ts>=now-24*60*60*1000 && ts<=now+60000;
+  if(range==="week"){
+    const today=jstDateKey(now);
+    const allowed=new Set();
+    for(let i=0;i<7;i++)allowed.add(jstDateKey(now-i*86400000));
+    return allowed.has(jstDateKey(ts));
+  }
+  return true;
+}
 function sumApp(id,range){
   const now=Date.now(),today=ptDateKey(now),docs=docsForApp(id),out={reads:0,writes:0,deletes:0};
   docs.forEach(d=>{
     if(range==="quotaDayPT"){
-      if(d.datePT===today){out.reads+=+d.reads||0;out.writes+=+d.writes||0;out.deletes+=+d.deletes||0}
+      if(d.datePT===today){
+        out.reads+=+d.reads||0; out.writes+=+d.writes||0; out.deletes+=+d.deletes||0;
+      }
       return;
     }
-    Object.keys(d).forEach(k=>{
-      const m=/^([rwd])_(\d{4})$/.exec(k);if(!m)return;
-      const hh=+m[2].slice(0,2),mm=+m[2].slice(2);
-      // Approximate bucket timestamp in PT by testing formatted PT bucket against dates.
-      // For selection, 24h/week include all fetched daily buckets; 1h filters by bucket age using a compact matcher below.
-      let include=true;
-      if(range==="hour"){
-        const target=`${String(hh).padStart(2,"0")}${String(mm).padStart(2,"0")}`;
-        include=isRecentPtBucket(d.datePT,target,70);
-      }
-      if(include){
-        if(m[1]==="r")out.reads+=+d[k]||0;
-        if(m[1]==="w")out.writes+=+d[k]||0;
-        if(m[1]==="d")out.deletes+=+d[k]||0;
-      }
+    telemetryFieldsForDoc(d).forEach(f=>{
+      const ts=ptBucketToDate(d.datePT,f.bucket).getTime();
+      if(!inSelectedRange(ts,range))return;
+      out[metricKind(f.kind)]+=f.value;
     });
   });
   return out;
-}
-function isRecentPtBucket(date,bucket,minutes){
-  const now=Date.now();
-  for(let i=0;i<=minutes;i+=10){
-    const t=now-i*60000;
-    const p=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(new Date(t));
-    const g=x=>p.find(z=>z.type===x)?.value||"00";
-    let h=g("hour");if(h==="24")h="00";
-    const b=h+String(Math.floor(+g("minute")/10)*10).padStart(2,"0");
-    const d=`${g("year")}-${g("month")}-${g("day")}`;
-    if(d===date&&b===bucket)return true;
-  }return false;
 }
 function ptBucketToDate(datePT,bucket){
   const [y,m,d]=datePT.split("-").map(Number);
@@ -316,21 +321,15 @@ function ptBucketToDate(datePT,bucket){
   return new Date(utc);
 }
 
-function tenMinFloor(ts){return Math.floor(ts/600000)*600000}
+function minuteFloor(ts){return Math.floor(ts/60000)*60000}
 function rawPointMap(id){
   const map=new Map();
   docsForApp(id).forEach(d=>{
-    const buckets=new Set();
-    Object.keys(d).forEach(k=>{const m=/^[rwd]_(\d{4})$/.exec(k);if(m)buckets.add(m[1]);});
-    buckets.forEach(bucket=>{
-      const dt=ptBucketToDate(d.datePT,bucket);
-      const ts=tenMinFloor(dt.getTime());
-      map.set(ts,{
-        ts,
-        reads:+d[`r_${bucket}`]||0,
-        writes:+d[`w_${bucket}`]||0,
-        deletes:+d[`d_${bucket}`]||0
-      });
+    telemetryFieldsForDoc(d).forEach(f=>{
+      const ts=minuteFloor(ptBucketToDate(d.datePT,f.bucket).getTime());
+      const p=map.get(ts)||{ts,reads:0,writes:0,deletes:0};
+      p[metricKind(f.kind)]+=f.value;
+      map.set(ts,p);
     });
   });
   return map;
@@ -350,21 +349,20 @@ function seriesForApp(id,range){
     }
     const byDay=new Map(days.map(x=>[x.key,x]));
     map.forEach(p=>{
-      const key=jstDateKey(p.ts),d=byDay.get(key);
+      const d=byDay.get(jstDateKey(p.ts));
       if(d){d.reads+=p.reads;d.writes+=p.writes;d.deletes+=p.deletes}
     });
     return days;
   }
 
-  let startTs,endTs=tenMinFloor(now);
-  if(range==="hour")startTs=endTs-60*60000;
-  else if(range==="day24")startTs=endTs-24*60*60000;
+  let startTs,endTs=minuteFloor(now);
+  if(range==="hour")startTs=endTs-59*60000;
+  else if(range==="day24")startTs=endTs-(24*60-1)*60000;
   else{
     const today=ptDateKey(now);
-    const midnight=ptBucketToDate(today,"0000").getTime();
-    startTs=tenMinFloor(midnight);
+    startTs=minuteFloor(ptBucketToDate(today,"0000").getTime());
   }
-  for(let ts=startTs;ts<=endTs;ts+=600000){
+  for(let ts=startTs;ts<=endTs;ts+=60000){
     const p=map.get(ts);
     pts.push(p||{ts,reads:0,writes:0,deletes:0});
   }
@@ -419,13 +417,19 @@ function drawChart(canvas,id){
   ctx.strokeStyle="#52636d";ctx.beginPath();ctx.moveTo(L,T);ctx.lineTo(L,T+ph);ctx.lineTo(L+pw,T+ph);ctx.stroke();
 
   const tickIdx=[];
-  if(selectedRange==="hour"){
-    for(let i=0;i<pts.length;i++)tickIdx.push(i); // 10-minute labels
-  }else if(selectedRange==="week"){
-    for(let i=0;i<pts.length;i++)tickIdx.push(i); // daily labels
+  if(selectedRange==="week"){
+    for(let i=0;i<pts.length;i++)tickIdx.push(i);
   }else{
-    const count=5;
-    for(let i=0;i<count;i++)tickIdx.push(Math.round(i*(pts.length-1)/(count-1)));
+    // Data points are 1-minute resolution; labels are every 10 minutes.
+    pts.forEach((p,i)=>{
+      const parts=new Intl.DateTimeFormat("en-US",{
+        timeZone:"Asia/Tokyo",minute:"2-digit",hour:"2-digit",hour12:false
+      }).formatToParts(new Date(p.ts));
+      const mm=Number(parts.find(x=>x.type==="minute")?.value||0);
+      if(mm%10===0)tickIdx.push(i);
+    });
+    // Keep the newest point readable even when it is not exactly on a 10-minute boundary.
+    if(!tickIdx.length)tickIdx.push(pts.length-1);
   }
 
   ctx.textBaseline="top";ctx.fillStyle="#71838d";
@@ -453,9 +457,9 @@ function drawChart(canvas,id){
     });
     ctx.stroke();
 
-    // Point markers. For dense 24h/PT views, mark non-zero points; for 1h/week mark every point.
+    // Mark real activity points; week view marks each daily point.
     pts.forEach((p,i)=>{
-      if((selectedRange==="day24"||selectedRange==="quotaDayPT") && !p[key])return;
+      if(selectedRange!=="week" && !p[key])return;
       const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
       const y=T+ph-(p[key]/ymax)*ph;
       ctx.beginPath();ctx.arc(x,y,2.4,0,Math.PI*2);ctx.fill();
@@ -471,9 +475,9 @@ function cardHtml(app){
       ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
       ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
       ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
-    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${selectedRange==="week"?"Operations / day":"Operations / 10min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
+    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${selectedRange==="week"?"Operations / day":"Operations / min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
     <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
-    <div class="meta"><span>Shared v0.3</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
+    <div class="meta"><span>Shared v0.4 / 1min</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
   </section>`;
 }
@@ -495,7 +499,7 @@ document.getElementById("rangeSeg").addEventListener("click",async e=>{
 });
 document.getElementById("refreshBtn").addEventListener("click",refresh);
 window.addEventListener("resize",()=>setTimeout(render,60));
-document.querySelector(".notice").innerHTML="v0.5 SHARED UI：PWAごとのlocalStorage隔離を越えるため、各アプリが10分単位の差分だけを共有Firestoreへ送信します。SENTINELは共有集計だけを読みます。監視値はアプリ起因の推計値です。";
+document.querySelector(".notice").innerHTML="v0.6 SHARED UI：各アプリは1分粒度でTelemetryを記録し、10分ごとにまとめて共有Firestoreへ送信します。SENTINELは1分粒度で描画し、横軸ラベルは10分間隔です。監視値はアプリ起因の推計値です。";
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
 </script>
