@@ -1,0 +1,15 @@
+name: SENTINEL Heartbeat
+
+on:
+  schedule:
+    - cron: '13,43 * * * *'
+  workflow_dispatch:
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Heartbeat log
+        run: |
+          echo "SENTINEL heartbeat OK"
+          date -u
