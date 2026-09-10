@@ -1,0 +1,15 @@
+name: Schedule Retest
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Heartbeat
+        run: |
+          echo "Schedule retest alive"
+          echo "UTC: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
