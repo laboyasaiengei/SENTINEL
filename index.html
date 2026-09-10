@@ -666,42 +666,40 @@ async function fetchDiagnostics(){
   return diagnosticRows;
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-async function setDiagnosticConfirmed(row,confirmed,checkbox){
+async function setDiagnosticConfirmed(row,checked,checkbox){
   if(!row||!row._name)return;
   if(checkbox)checkbox.disabled=true;
   try{
     const headers=await sharedHeaders();
-    const url=`https://firestore.googleapis.com/v1/${row._name}?updateMask.fieldPaths=confirmed`;
-    const body={fields:{confirmed:{booleanValue:!!confirmed}}};
+    const url=`https://firestore.googleapis.com/v1/${row._name}?updateMask.fieldPaths=checked`;
+    const body={fields:{checked:{booleanValue:!!checked}}};
     const res=await fetch(url,{method:"PATCH",headers,body:JSON.stringify(body),cache:"no-store"});
     const raw=await res.text();
-    if(!res.ok)throw new Error(`Diagnostic confirm HTTP ${res.status}: ${raw.slice(0,200)}`);
-    row.confirmed=!!confirmed;
+    if(!res.ok)throw new Error(`Diagnostic checked HTTP ${res.status}: ${raw.slice(0,300)}`);
+    row.checked=!!checked;
     renderDiagnostics();
-    try{await recordSentinelSharedActivity(0)}catch(e){console.error("SENTINEL diagnostic confirm telemetry:",e)}
   }catch(e){
-    if(checkbox){checkbox.checked=!confirmed;checkbox.disabled=false}
+    if(checkbox){checkbox.checked=!checked;checkbox.disabled=false;}
     alert("確認状態を保存できませんでした。\n"+(e.message||String(e)));
   }
 }
 async function deleteDiagnostic(row,button){
   if(!row||!row._name)return;
-  if(!confirm("このエラーログを削除しますか？\n削除後は元に戻せません。"))return;
+  if(!confirm("このエラーログをFirestoreから削除しますか？\nこの操作は元に戻せません。"))return;
   if(button)button.disabled=true;
   try{
     const headers=await sharedHeaders();
     const url=`https://firestore.googleapis.com/v1/${row._name}`;
     const res=await fetch(url,{method:"DELETE",headers,cache:"no-store"});
     const raw=await res.text();
-    if(!res.ok)throw new Error(`Diagnostic delete HTTP ${res.status}: ${raw.slice(0,200)}`);
+    if(!res.ok)throw new Error(`Diagnostic delete HTTP ${res.status}: ${raw.slice(0,300)}`);
     const idx=diagnosticRows.indexOf(row);
     if(idx>=0)diagnosticRows.splice(idx,1);
-    const appId=row.appId||diagnosticActiveApp;
+    const appId=row.appId||"";
     const appCount=diagnosticRows.filter(r=>r.appId===appId).length;
     const pageCount=Math.max(1,Math.ceil(appCount/DIAG_PAGE_SIZE));
     diagnosticPages[appId]=Math.min(diagnosticPages[appId]||1,pageCount);
     renderDiagnostics();
-    try{await recordSentinelSharedActivity(0)}catch(e){console.error("SENTINEL diagnostic delete telemetry:",e)}
   }catch(e){
     if(button)button.disabled=false;
     alert("エラーログを削除できませんでした。\n"+(e.message||String(e)));
@@ -729,7 +727,7 @@ function renderDiagnostics(){
     const pageRows=appRows.slice(start,start+DIAG_PAGE_SIZE);
 
     const table=pageRows.length?`<table class="diag-table"><thead><tr><th>発生時刻</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th><th>確認 / 削除</th></tr></thead><tbody>${pageRows.map(r=>{
-      const idx=diagnosticRows.indexOf(r),confirmed=r.confirmed===true;
+      const idx=diagnosticRows.indexOf(r),confirmed=r.checked===true;
       return `<tr class="${confirmed?"diag-row-confirmed":"diag-row-unconfirmed"}"><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></td><td>${esc(r.location)}</td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td>${esc(r.detail||"")}</td><td><div class="diag-actions"><label class="diag-confirm"><input type="checkbox" data-diag-index="${idx}" ${confirmed?"checked":""}><span class="${confirmed?"state-confirmed":"state-unconfirmed"}">${confirmed?"確認済み":"未確認"}</span></label><button class="diag-delete" type="button" data-diag-delete-index="${idx}">削除</button></div></td></tr>`;
     }).join("")}</tbody></table>`:`<div class="diag-app-empty">通報なし</div>`;
 
