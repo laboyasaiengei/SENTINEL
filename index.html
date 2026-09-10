@@ -144,24 +144,35 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   </div>
 
   <div class="toolbar">
-    <div class="segment" id="rangeSeg">
+    <div class="segment rangeSeg" id="rangeSeg">
       <button data-range="hour">1時間</button>
       <button data-range="day24">24時間</button>
       <button data-range="week">1週間</button>
+      <button data-range="month">1ヶ月</button>
       <button data-range="quotaDayPT" class="active">PT当日</button>
     </div>
-    <button class="ghost" id="refreshBtn">↻ 再読込</button>
+    <button class="ghost refreshBtn" id="refreshBtn">↻ 再読込</button>
   </div>
 <div class="section-title">PRODUCTION</div>
   <div class="grid" id="prodGrid"></div>
 
+  <div class="toolbar dev-toolbar">
+    <div class="segment rangeSeg">
+      <button data-range="hour">1時間</button>
+      <button data-range="day24">24時間</button>
+      <button data-range="week">1週間</button>
+      <button data-range="month">1ヶ月</button>
+      <button data-range="quotaDayPT" class="active">PT当日</button>
+    </div>
+    <button class="ghost refreshBtn">↻ 再読込</button>
+  </div>
   <div class="section-title">DEVELOPMENT</div>
   <div class="grid" id="devGrid"></div>
 </main>
 
 <footer>
   SENTINEL v1.0 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
-  Production telemetry keys are reserved but will remain「未導入」until ATLAS / CAESAR stable receive Telemetry v0.2.
+  Shared Telemetry dashboard · 1時間 / 24時間 / 1週間 / 1ヶ月 / PT当日。
 </footer>
 
 
@@ -198,7 +209,7 @@ function ptDateKey(ts){
 function ptDateKeysForRange(range){
   const out=[];
   // 1hもPT 0:00を跨ぐ可能性があるため、前日docまで取得する。
-  const now=Date.now(),days=range==="week"?8:(range==="day24"||range==="hour")?2:1;
+  const now=Date.now(),days=range==="month"?30:range==="week"?8:(range==="day24"||range==="hour")?2:1;
   for(let i=0;i<days;i++)out.push(ptDateKey(now-i*24*60*60*1000));
   return [...new Set(out)];
 }
@@ -279,10 +290,10 @@ function inSelectedRange(ts,range){
   const now=Date.now();
   if(range==="hour")return ts>=now-60*60*1000 && ts<=now+60000;
   if(range==="day24")return ts>=now-24*60*60*1000 && ts<=now+60000;
-  if(range==="week"){
-    const today=jstDateKey(now);
+  if(range==="week" || range==="month"){
     const allowed=new Set();
-    for(let i=0;i<7;i++)allowed.add(jstDateKey(now-i*86400000));
+    const count=range==="month"?30:7;
+    for(let i=0;i<count;i++)allowed.add(jstDateKey(now-i*86400000));
     return allowed.has(jstDateKey(ts));
   }
   return true;
@@ -362,9 +373,10 @@ function jstDateKey(ts){
 }
 function seriesForApp(id,range){
   const map=rawPointMap(id),now=Date.now(),pts=[];
-  if(range==="week"){
+  if(range==="week" || range==="month"){
     const days=[];
-    for(let i=6;i>=0;i--){
+    const count=range==="month"?30:7;
+    for(let i=count-1;i>=0;i--){
       const t=now-i*86400000,key=jstDateKey(t);
       if(!days.some(x=>x.key===key))days.push({key,ts:t,reads:0,writes:0,deletes:0});
     }
@@ -442,7 +454,7 @@ function statusFor(id){
   const t=latestSeen(id);
   if(!t)return ["未受信","wait"];
   if(Date.now()-t<=25*60*1000)return ["共有中","live"];
-  return ["停止/古い","wait"];
+  return ["未受信","wait"];
 }
 function metricHtml(label,val,lim,quotaMode){
   const p=quotaMode?pct(val,lim):0,sev=severity(p);
@@ -457,7 +469,7 @@ function quotaAlerts(s){
     else if(p>=80)out.push({type:"warn",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 注意域`});
   });return out;
 }
-function rangeLabel(r){return ({hour:"1時間",day24:"24時間",week:"1週間",quotaDayPT:"PT当日"})[r]||r}
+function rangeLabel(r){return ({hour:"1時間",day24:"24時間",week:"1週間",month:"1ヶ月",quotaDayPT:"PT当日"})[r]||r}
 function drawChart(canvas,id){
   const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
   canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));ctx.scale(dpr,dpr);
@@ -484,6 +496,10 @@ function drawChart(canvas,id){
 if(selectedRange==="week"){
   // 1週間：1日ごと
   for(let i=0;i<pts.length;i++) tickIdx.push(i);
+
+}else if(selectedRange==="month"){
+  // 1ヶ月：日別集計。横軸ラベルは5日おき＋最終日で過密を避ける。
+  for(let i=0;i<pts.length;i++) if(i%5===0 || i===pts.length-1) tickIdx.push(i);
 
 }else{
   pts.forEach((p,i)=>{
@@ -518,7 +534,7 @@ if(selectedRange==="week"){
   [...new Set(tickIdx)].forEach((idx,j,arr)=>{
     const p=pts[idx],x=pts.length===1?L+pw/2:L+idx/(pts.length-1)*pw;
     let label;
-    if(selectedRange==="week"){
+    if(selectedRange==="week" || selectedRange==="month"){
       const [y,m,d]=p.key.split("-");
       label=`${+m}/${+d}`;
     }else{
@@ -568,7 +584,7 @@ function cardHtml(app){
       ${metricHtml("READS",s.reads,LIMITS.reads,selectedRange==="quotaDayPT")}
       ${metricHtml("WRITES",s.writes,LIMITS.writes,selectedRange==="quotaDayPT")}
       ${metricHtml("DELETES",s.deletes,LIMITS.deletes,selectedRange==="quotaDayPT")}
-    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${selectedRange==="week"?"Operations / day":(selectedRange==="day24"||selectedRange==="quotaDayPT")?"Operations / hour":"Operations / min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
+    </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${(selectedRange==="week"||selectedRange==="month")?"Operations / day":(selectedRange==="day24"||selectedRange==="quotaDayPT")?"Operations / hour":"Operations / min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
     <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
     <div class="meta"><span>Shared v0.4 / 1min</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
@@ -582,17 +598,21 @@ function render(){
   document.querySelectorAll(".card[data-app]").forEach(c=>{const cv=c.querySelector("canvas");if(cv)drawChart(cv,c.dataset.app)});
 }
 async function refresh(){
-  const btn=document.getElementById("refreshBtn");btn.disabled=true;btn.textContent="↻ 取得中";
+  const btns=[...document.querySelectorAll(".refreshBtn")];
+  btns.forEach(btn=>{btn.disabled=true;btn.textContent="↻ 取得中";});
   try{await fetchShared();}catch(e){lastRemoteError=e.message||String(e);console.error(e);}
-  render();btn.disabled=false;btn.textContent="↻ 再読込";
+  render();
+  btns.forEach(btn=>{btn.disabled=false;btn.textContent="↻ 再読込";});
 }
-document.getElementById("rangeSeg").addEventListener("click",async e=>{
+document.querySelectorAll(".rangeSeg").forEach(seg=>seg.addEventListener("click",async e=>{
   const b=e.target.closest("button[data-range]");if(!b)return;
-  selectedRange=b.dataset.range;document.querySelectorAll("#rangeSeg button").forEach(x=>x.classList.toggle("active",x===b));await refresh();
-});
-document.getElementById("refreshBtn").addEventListener("click",refresh);
+  selectedRange=b.dataset.range;
+  document.querySelectorAll(".rangeSeg button[data-range]").forEach(x=>x.classList.toggle("active",x.dataset.range===selectedRange));
+  await refresh();
+}));
+document.querySelectorAll(".refreshBtn").forEach(btn=>btn.addEventListener("click",refresh));
 window.addEventListener("resize",()=>setTimeout(render,60));
-document.querySelector(".notice").innerHTML="v1.0 SHARED UI：各アプリは1分粒度でTelemetryを記録し、10分ごとにまとめて共有Firestoreへ送信します。1時間は線、24時間・PT当日は棒、1週間は日別線で描画します。監視値はアプリ起因の推計値です。";
+document.querySelector(".notice").innerHTML="v1.0 SHARED UI：ATLAS / CAESARが記録した1分粒度のTelemetryを共有Firestoreから取得して表示します。グラフは1時間＝1分単位、24時間・PT当日＝1時間単位、1週間・1ヶ月＝1日単位の折れ線です。『共有中』は直近25分以内に受信あり、『未受信』は受信なし／直近25分以内の受信なしを示します。『異常検知なし』はPT当日の推計使用量が警告域（各無料枠80%以上）に達していないことを示します。";
 
 // Keep the intentional white splash briefly visible, then fade to the dark dashboard.
 // This does not try to suppress iOS' native white launch frame; it visually connects to it.
