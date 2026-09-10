@@ -112,6 +112,9 @@ footer{max-width:1180px;margin:20px auto 0;padding:0 18px;color:#6f808a;font-siz
 body.sentinel-booting{overflow:hidden}
 body.sentinel-booting > header,body.sentinel-booting > main,body.sentinel-booting > footer{opacity:0}
 body > header,body > main,body > footer{transition:opacity .55s ease .34s}
+
+.diag-nav{display:flex;gap:7px;margin-top:10px}.diag-nav button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:7px 11px;border-radius:8px;font-size:11px;cursor:pointer}.diag-nav button.active{background:#20313b;color:#fff;border-color:#416679}
+.diag-panel{display:none}.diag-panel.active{display:block}.diag-table-wrap{overflow:auto;background:#10181e;border:1px solid var(--line);border-radius:12px}.diag-table{width:100%;border-collapse:collapse;min-width:820px;font-size:11px}.diag-table th,.diag-table td{padding:9px 10px;border-bottom:1px solid #22313a;text-align:left;vertical-align:top}.diag-table th{color:#91a2ad;font-size:9.5px;letter-spacing:.04em}.diag-badge{display:inline-block;padding:3px 6px;border-radius:999px;border:1px solid var(--line)}.diag-badge.err{color:#f0aaaa;border-color:#6c3939;background:#271515}.diag-badge.test{color:#9bd7b4;border-color:#2f6547;background:#102219}.diag-empty{padding:30px;text-align:center;color:var(--muted)}
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -133,12 +136,14 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
       <div class="header-right">
         <span id="ptDate" class="pill">PT quota day —</span>
         <span id="liveBadge" class="pill ok">接続準備中</span>
+        <div class="diag-nav"><button id="navMonitor" class="active">監視</button><button id="navDiagnostics">エラー通報</button></div>
       </div>
     </div>
   </div>
 </header>
 
 <main>
+  <div id="monitorView" class="diag-panel active">
   <div class="notice">
     v0.1 LOCAL：同じブラウザ・同じ origin に保存されたSENTINEL Telemetryを読み取ります。
     Google Cloud Monitoring / Firestoreへの監視用通信は行いません。表示値はアプリ起因の推計値です。
@@ -167,6 +172,12 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
     <button class="ghost refreshBtn">↻ 再読込</button>
   </div>
   <div class="grid" id="devGrid"></div>
+  </div>
+  <div id="diagnosticsView" class="diag-panel">
+    <div class="toolbar"><div><div class="section-title" style="margin:0">エラー通報</div><div class="sub">ATLAS / CAESAR が自動送信した技術診断情報。入力内容・氏名・薬品名は収集しません。</div></div><button class="ghost" id="diagRefreshBtn">↻ 再読込</button></div>
+    <div id="diagSummary" class="summary"></div>
+    <div class="diag-table-wrap"><div id="diagList" class="diag-empty">取得前</div></div>
+  </div>
 </main>
 
 <footer>
@@ -193,12 +204,16 @@ const SHARED_CONFIG={
 };
 const SHARED_SITE_KEY="6LffvagtAAAAAMYORF3VlYDdUBemsfqunrxkArCo";
 const SHARED_COLLECTION="sentinelTelemetryDaily";
+const DIAG_COLLECTION="sentinelDiagnostics";
+const DIAG_LIMIT=50;
 const AUTO_REFRESH_MS=10*60*1000;
 let selectedRange="quotaDayPT";
 let sharedApp=null, sharedAuth=null, sharedAppCheck=null;
 let remoteDocs=[];
 let lastRemoteError="";
 let readsThisSession=0;
+let diagnosticRows=[];
+let diagnosticError="";
 
 function ptDateKey(ts){
   const p=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(ts));
@@ -633,6 +648,31 @@ function cardHtml(app){
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
   </section>`;
 }
+
+function decodeDiagDoc(doc){const f=(doc&&doc.fields)||{},o={};Object.keys(f).forEach(k=>{const v=f[k];if("stringValue" in v)o[k]=v.stringValue;else if("integerValue" in v)o[k]=Number(v.integerValue);else if("booleanValue" in v)o[k]=!!v.booleanValue;else if("timestampValue" in v)o[k]=v.timestampValue});return o}
+async function fetchDiagnostics(){
+  const headers=await sharedHeaders();
+  const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents:runQuery`;
+  const body={structuredQuery:{from:[{collectionId:DIAG_COLLECTION}],orderBy:[{field:{fieldPath:"occurredAt"},direction:"DESCENDING"}],limit:DIAG_LIMIT}};
+  const res=await fetch(url,{method:"POST",headers,body:JSON.stringify(body),cache:"no-store"});const raw=await res.text();
+  if(!res.ok)throw new Error(`Diagnostic read HTTP ${res.status}: ${raw.slice(0,200)}`);
+  const rows=raw?JSON.parse(raw):[];diagnosticRows=(Array.isArray(rows)?rows:[]).filter(x=>x&&x.document).map(x=>decodeDiagDoc(x.document));diagnosticError="";
+  // This diagnostic query is also SENTINEL-caused Firestore activity.
+  try{await recordSentinelSharedActivity(Math.max(1,diagnosticRows.length))}catch(e){console.error("SENTINEL diagnostic telemetry:",e)}
+  return diagnosticRows;
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function renderDiagnostics(){
+  const list=document.getElementById("diagList"),sum=document.getElementById("diagSummary");if(!list||!sum)return;
+  const now=Date.now(),day=diagnosticRows.filter(r=>Date.parse(r.occurredAt||0)>=now-86400000),errors=day.filter(r=>r.category!=="self-test"),tests=day.filter(r=>r.category==="self-test");
+  sum.innerHTML=`<div class="box"><div class="k">24H REPORTS</div><div class="v">${day.length}</div></div><div class="box"><div class="k">24H ERRORS</div><div class="v">${errors.length}</div></div><div class="box"><div class="k">ATLAS</div><div class="v">${day.filter(r=>String(r.appId).startsWith("atlas")).length}</div></div><div class="box"><div class="k">CAESAR</div><div class="v">${day.filter(r=>String(r.appId).startsWith("caesar")).length}</div></div>`;
+  if(diagnosticError){list.className="diag-empty";list.textContent=diagnosticError;return}
+  if(!diagnosticRows.length){list.className="diag-empty";list.textContent="エラー通報なし";return}
+  list.className="";list.innerHTML=`<table class="diag-table"><thead><tr><th>発生時刻</th><th>APP</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th></tr></thead><tbody>${diagnosticRows.map(r=>`<tr><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td>${esc(r.appId)}</td><td><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></td><td>${esc(r.location)}</td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td>${esc(r.detail||"")}</td></tr>`).join("")}</tbody></table>`;
+}
+async function refreshDiagnostics(){const b=document.getElementById("diagRefreshBtn");if(b){b.disabled=true;b.textContent="↻ 取得中"}try{await fetchDiagnostics()}catch(e){diagnosticError=e.message||String(e)}renderDiagnostics();if(b){b.disabled=false;b.textContent="↻ 再読込"}}
+function setSentinelView(which){const monitor=which==="monitor";document.getElementById("monitorView").classList.toggle("active",monitor);document.getElementById("diagnosticsView").classList.toggle("active",!monitor);document.getElementById("navMonitor").classList.toggle("active",monitor);document.getElementById("navDiagnostics").classList.toggle("active",!monitor);if(!monitor)refreshDiagnostics()}
+
 function render(){
   document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(cardHtml).join("");
   document.getElementById("devGrid").innerHTML=APPS.filter(a=>a.group==="dev").map(cardHtml).join("");
@@ -656,6 +696,10 @@ document.querySelectorAll(".rangeSeg").forEach(seg=>seg.addEventListener("click"
 document.querySelectorAll(".refreshBtn").forEach(btn=>btn.addEventListener("click",refresh));
 window.addEventListener("resize",()=>setTimeout(render,60));
 document.querySelector(".notice").innerHTML="v1.0 SHARED UI：ATLAS / CAESARが記録した1分粒度のTelemetryを共有Firestoreから取得して表示します。グラフは1時間＝1分単位、24時間・PT当日＝1時間単位、1週間・1ヶ月＝1日単位の折れ線です。『共有中』は直近25分以内に受信あり、『未受信』は受信なし／直近25分以内の受信なしを示します。『異常検知なし』はPT当日の推計使用量が警告域（各無料枠80%以上）に達していないことを示します。";
+
+document.getElementById("navMonitor").addEventListener("click",()=>setSentinelView("monitor"));
+document.getElementById("navDiagnostics").addEventListener("click",()=>setSentinelView("diagnostics"));
+document.getElementById("diagRefreshBtn").addEventListener("click",refreshDiagnostics);
 
 // Keep the intentional white splash briefly visible, then fade to the dark dashboard.
 // This does not try to suppress iOS' native white launch frame; it visually connects to it.
