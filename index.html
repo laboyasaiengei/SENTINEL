@@ -114,7 +114,7 @@ body.sentinel-booting > header,body.sentinel-booting > main,body.sentinel-bootin
 body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 
 .diag-nav{display:flex;gap:7px;margin-top:10px}.diag-nav button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:7px 11px;border-radius:8px;font-size:11px;cursor:pointer}.diag-nav button.active{background:#20313b;color:#fff;border-color:#416679}
-.diag-panel{display:none}.diag-panel.active{display:block}.diag-table-wrap{overflow:auto;background:#10181e;border:1px solid var(--line);border-radius:12px}.diag-table{width:100%;border-collapse:collapse;min-width:820px;font-size:11px}.diag-table th,.diag-table td{padding:9px 10px;border-bottom:1px solid #22313a;text-align:left;vertical-align:top}.diag-table th{color:#91a2ad;font-size:9.5px;letter-spacing:.04em}.diag-badge{display:inline-block;padding:3px 6px;border-radius:999px;border:1px solid var(--line)}.diag-badge.err{color:#f0aaaa;border-color:#6c3939;background:#271515}.diag-badge.test{color:#9bd7b4;border-color:#2f6547;background:#102219}.diag-empty{padding:30px;text-align:center;color:var(--muted)}
+.diag-panel{display:none}.diag-panel.active{display:block}.diag-table-wrap{overflow:auto;background:#10181e;border:1px solid var(--line);border-radius:12px}.diag-table{width:100%;border-collapse:collapse;min-width:820px;font-size:11px}.diag-table th,.diag-table td{padding:9px 10px;border-bottom:1px solid #22313a;text-align:left;vertical-align:top}.diag-table th{color:#91a2ad;font-size:9.5px;letter-spacing:.04em}.diag-badge{display:inline-block;padding:3px 6px;border-radius:999px;border:1px solid var(--line)}.diag-badge.err{color:#f0aaaa;border-color:#6c3939;background:#271515}.diag-badge.test{color:#9bd7b4;border-color:#2f6547;background:#102219}.diag-empty{padding:30px;text-align:center;color:var(--muted)}.diag-app-section{margin-top:14px}.diag-app-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 7px;padding:0 2px}.diag-app-title{font-size:13px;font-weight:800;color:#c9d7de}.diag-app-count{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 7px}.diag-app-empty{padding:18px;text-align:center;color:var(--muted);font-size:11px}
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -174,7 +174,7 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   <div class="grid" id="devGrid"></div>
   </div>
   <div id="diagnosticsView" class="diag-panel">
-    <div class="toolbar"><div><div class="section-title" style="margin:0">エラー通報</div><div class="sub">ATLAS / CAESAR が自動送信した技術診断情報。入力内容・氏名・薬品名は収集しません。</div></div><button class="ghost" id="diagRefreshBtn">↻ 再読込</button></div>
+    <div class="toolbar"><div><div class="section-title" style="margin:0">エラー通報</div><div class="sub">各アプリが自動送信した技術診断情報をアプリ別に表示します。入力内容・氏名・薬品名は収集しません。</div></div><button class="ghost" id="diagRefreshBtn">↻ 再読込</button></div>
     <div id="diagSummary" class="summary"></div>
     <div class="diag-table-wrap"><div id="diagList" class="diag-empty">取得前</div></div>
   </div>
@@ -668,7 +668,14 @@ function renderDiagnostics(){
   sum.innerHTML=`<div class="box"><div class="k">24H REPORTS</div><div class="v">${day.length}</div></div><div class="box"><div class="k">24H ERRORS</div><div class="v">${errors.length}</div></div><div class="box"><div class="k">ATLAS</div><div class="v">${day.filter(r=>String(r.appId).startsWith("atlas")).length}</div></div><div class="box"><div class="k">CAESAR</div><div class="v">${day.filter(r=>String(r.appId).startsWith("caesar")).length}</div></div>`;
   if(diagnosticError){list.className="diag-empty";list.textContent=diagnosticError;return}
   if(!diagnosticRows.length){list.className="diag-empty";list.textContent="エラー通報なし";return}
-  list.className="";list.innerHTML=`<table class="diag-table"><thead><tr><th>発生時刻</th><th>APP</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th></tr></thead><tbody>${diagnosticRows.map(r=>`<tr><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td>${esc(r.appId)}</td><td><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></td><td>${esc(r.location)}</td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td>${esc(r.detail||"")}</td></tr>`).join("")}</tbody></table>`;
+  const groups=[
+    {id:"atlas-prod",label:"ATLAS"},
+    {id:"caesar-prod",label:"CAESAR"},
+    {id:"atlas-dev",label:"ATLAS-Development"},
+    {id:"caesar-dev",label:"Dev-CAESAR"}
+  ];
+  const tableFor=(rows,label)=>`<section class="diag-app-section"><div class="diag-app-head"><div class="diag-app-title">${esc(label)}</div><div class="diag-app-count">${rows.length}件</div></div><div class="diag-table-wrap">${rows.length?`<table class="diag-table"><thead><tr><th>発生時刻</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></td><td>${esc(r.location)}</td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td>${esc(r.detail||"")}</td></tr>`).join("")}</tbody></table>`:`<div class="diag-app-empty">通報なし</div>`}</div></section>`;
+  list.className="";list.innerHTML=groups.map(g=>tableFor(diagnosticRows.filter(r=>r.appId===g.id),g.label)).join("");
 }
 async function refreshDiagnostics(){const b=document.getElementById("diagRefreshBtn");if(b){b.disabled=true;b.textContent="↻ 取得中"}try{await fetchDiagnostics()}catch(e){diagnosticError=e.message||String(e)}renderDiagnostics();if(b){b.disabled=false;b.textContent="↻ 再読込"}}
 function setSentinelView(which){const monitor=which==="monitor";document.getElementById("monitorView").classList.toggle("active",monitor);document.getElementById("diagnosticsView").classList.toggle("active",!monitor);document.getElementById("navMonitor").classList.toggle("active",monitor);document.getElementById("navDiagnostics").classList.toggle("active",!monitor);if(!monitor)refreshDiagnostics()}
