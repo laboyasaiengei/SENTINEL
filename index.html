@@ -175,8 +175,7 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   </div>
   <div id="diagnosticsView" class="diag-panel">
     <div class="toolbar"><div><div class="section-title" style="margin:0">エラー通報</div><div class="sub">各アプリが自動送信した技術診断情報をアプリ別に表示します。入力内容・氏名・薬品名は収集しません。</div></div><button class="ghost" id="diagRefreshBtn">↻ 再読込</button></div>
-    <div id="diagSummary" class="summary"></div>
-    <div class="diag-table-wrap"><div id="diagList" class="diag-empty">取得前</div></div>
+      <div class="diag-table-wrap"><div id="diagList" class="diag-empty">取得前</div></div>
   </div>
 </main>
 
@@ -663,9 +662,7 @@ async function fetchDiagnostics(){
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function renderDiagnostics(){
-  const list=document.getElementById("diagList"),sum=document.getElementById("diagSummary");if(!list||!sum)return;
-  const now=Date.now(),day=diagnosticRows.filter(r=>Date.parse(r.occurredAt||0)>=now-86400000),errors=day.filter(r=>r.category!=="self-test"),tests=day.filter(r=>r.category==="self-test");
-  sum.innerHTML=`<div class="box"><div class="k">24H REPORTS</div><div class="v">${day.length}</div></div><div class="box"><div class="k">24H ERRORS</div><div class="v">${errors.length}</div></div><div class="box"><div class="k">ATLAS</div><div class="v">${day.filter(r=>String(r.appId).startsWith("atlas")).length}</div></div><div class="box"><div class="k">CAESAR</div><div class="v">${day.filter(r=>String(r.appId).startsWith("caesar")).length}</div></div>`;
+  const list=document.getElementById("diagList");if(!list)return;
   if(diagnosticError){list.className="diag-empty";list.textContent=diagnosticError;return}
   if(!diagnosticRows.length){list.className="diag-empty";list.textContent="エラー通報なし";return}
   const groups=[
