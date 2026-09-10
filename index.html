@@ -113,9 +113,9 @@ body.sentinel-booting{overflow:hidden}
 body.sentinel-booting > header,body.sentinel-booting > main,body.sentinel-booting > footer{opacity:0}
 body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 
-/* ===== SENTINEL Diagnostics: app tabs + independent 10-row paging ===== */
-.page-tabs,.diag-app-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:10px 0 12px}.page-tabs::-webkit-scrollbar,.diag-app-tabs::-webkit-scrollbar{display:none}.page-tab,.diag-app-tab{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:999px;padding:7px 12px;font:700 11px/1 sans-serif;white-space:nowrap;cursor:pointer}.page-tab.active,.diag-app-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}.sentinel-page{display:none}.sentinel-page.active{display:block}.diag-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;overflow:hidden}.diag-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.diag-title{font-weight:800;font-size:14px}.diag-count{font-size:10px;color:var(--muted)}.diag-table-wrap{overflow-x:auto}.diag-table{width:100%;border-collapse:collapse;min-width:850px}.diag-table th,.diag-table td{padding:8px 6px;border-bottom:1px solid var(--line);font-size:10px;text-align:left;vertical-align:middle}.diag-table th{font-size:9px;color:var(--muted);white-space:nowrap}.diag-table tr.checked{background:rgba(66,160,95,.08)}.diag-status{display:inline-flex;align-items:center;gap:5px;font-weight:800;white-space:nowrap}.diag-dot{width:8px;height:8px;border-radius:50%;background:#d24a43}.checked .diag-dot{background:#3a9b5c}.diag-check{width:18px;height:18px;accent-color:#3a9b5c}.diag-delete{border:1px solid rgba(210,74,67,.35);background:transparent;color:#d24a43;border-radius:8px;padding:5px 8px;font-size:10px;cursor:pointer}.diag-pager{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:12px}.diag-pager button{min-width:30px;height:30px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;cursor:pointer}.diag-pager button.active{background:var(--accent);color:#fff;border-color:var(--accent)}.diag-empty{padding:28px 10px;text-align:center;color:var(--muted);font-size:12px}.diag-error{padding:10px;border-radius:9px;background:rgba(210,74,67,.10);color:#d24a43;font-size:11px;margin-bottom:10px}
-
+.diag-nav{display:flex;gap:7px;margin-top:10px}.diag-nav button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:7px 11px;border-radius:8px;font-size:11px;cursor:pointer}.diag-nav button.active{background:#20313b;color:#fff;border-color:#416679}
+.diag-panel{display:none}.diag-panel.active{display:block}.diag-table-wrap{overflow:auto;background:#10181e;border:1px solid var(--line);border-radius:12px}.diag-table{width:100%;border-collapse:collapse;min-width:820px;font-size:11px}.diag-table th,.diag-table td{padding:9px 10px;border-bottom:1px solid #22313a;text-align:left;vertical-align:top}.diag-table th{color:#91a2ad;font-size:9.5px;letter-spacing:.04em}.diag-badge{display:inline-block;padding:3px 6px;border-radius:999px;border:1px solid var(--line)}.diag-badge.err{color:#f0aaaa;border-color:#6c3939;background:#271515}.diag-badge.test{color:#9bd7b4;border-color:#2f6547;background:#102219}.diag-empty{padding:30px;text-align:center;color:var(--muted)}.diag-app-section{margin-top:14px}.diag-app-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 7px;padding:0 2px}.diag-app-title{font-size:13px;font-weight:800;color:#c9d7de}.diag-app-count{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 7px}.diag-app-empty{padding:18px;text-align:center;color:var(--muted);font-size:11px}
+.diag-table th:nth-child(6),.diag-table td:nth-child(6){width:72px;padding-right:4px;white-space:nowrap}.diag-table th:nth-child(7),.diag-table td:nth-child(7){padding-left:4px}.diag-table th:nth-child(8),.diag-table td:nth-child(8){width:92px;text-align:center;white-space:nowrap}.diag-row-unconfirmed{background:#251516}.diag-row-unconfirmed:hover{background:#2d1819}.diag-row-confirmed{background:#112219}.diag-row-confirmed:hover{background:#14291e}.diag-confirm{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;font-weight:700}.diag-confirm input{accent-color:var(--ok);width:15px;height:15px;cursor:pointer}.diag-confirm .state-unconfirmed{color:#ef9a9a}.diag-confirm .state-confirmed{color:#9bd7b4}.diag-pages{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:14px 0 2px}.diag-pages button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer}.diag-pages button.active{background:#20313b;color:#fff;border-color:#416679}.diag-pages button:disabled{opacity:.45;cursor:default}.diag-actions{display:flex;align-items:center;justify-content:center;gap:6px}.diag-delete{border:1px solid #7a3d3d;background:#291617;color:#f0aaaa;padding:5px 8px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer}.diag-delete:hover{background:#351a1c}.diag-delete:disabled{opacity:.5;cursor:default}.diag-app-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 10px}.diag-app-tabs button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:7px 11px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer}.diag-app-tabs button.active{background:#20313b;color:#fff;border-color:#416679}.diag-app-tabs .count{margin-left:5px;font-size:9px;opacity:.8}
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -137,17 +137,14 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
       <div class="header-right">
         <span id="ptDate" class="pill">PT quota day —</span>
         <span id="liveBadge" class="pill ok">接続準備中</span>
+        <div class="diag-nav"><button id="navMonitor" class="active">アクティビティモニター</button><button id="navDiagnostics">エラーリスト</button></div>
       </div>
     </div>
   </div>
 </header>
 
 <main>
-  <div class="page-tabs">
-    <button class="page-tab active" data-page="monitor">監視</button>
-    <button class="page-tab" data-page="diagnostics">エラー通報</button>
-  </div>
-  <section id="page-monitor" class="sentinel-page active">
+  <div id="monitorView" class="diag-panel active">
   <div class="notice">
     v0.1 LOCAL：同じブラウザ・同じ origin に保存されたSENTINEL Telemetryを読み取ります。
     Google Cloud Monitoring / Firestoreへの監視用通信は行いません。表示値はアプリ起因の推計値です。
@@ -176,18 +173,11 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
     <button class="ghost refreshBtn">↻ 再読込</button>
   </div>
   <div class="grid" id="devGrid"></div>
-  </section>
-
-  <section id="page-diagnostics" class="sentinel-page">
-    <div class="notice">各アプリが自動送信した技術診断情報をアプリ別に表示します。入力内容・氏名・薬品名は収集しません。</div>
-    <div class="diag-app-tabs" id="diagAppTabs"></div>
-    <div class="diag-panel">
-      <div class="diag-head"><div class="diag-title" id="diagTitle">ATLAS</div><div class="diag-count" id="diagCount">0件</div></div>
-      <div id="diagError"></div>
-      <div id="diagBody"><div class="diag-empty">取得中…</div></div>
-      <div class="diag-pager" id="diagPager"></div>
-    </div>
-  </section>
+  </div>
+  <div id="diagnosticsView" class="diag-panel">
+    <div class="toolbar"><div><div class="section-title" style="margin:0">エラーログ</div><div class="sub">各アプリが自動送信した技術診断情報をアプリ別に表示します。入力内容・氏名・薬品名は収集しません。</div></div><button class="ghost" id="diagRefreshBtn">↻ 再読込</button></div>
+      <div class="diag-table-wrap"><div id="diagList" class="diag-empty">取得前</div></div>
+  </div>
 </main>
 
 <footer>
@@ -214,12 +204,19 @@ const SHARED_CONFIG={
 };
 const SHARED_SITE_KEY="6LffvagtAAAAAMYORF3VlYDdUBemsfqunrxkArCo";
 const SHARED_COLLECTION="sentinelTelemetryDaily";
+const DIAG_COLLECTION="sentinelDiagnostics";
+const DIAG_LIMIT=50;
 const AUTO_REFRESH_MS=10*60*1000;
 let selectedRange="quotaDayPT";
 let sharedApp=null, sharedAuth=null, sharedAppCheck=null;
 let remoteDocs=[];
 let lastRemoteError="";
 let readsThisSession=0;
+let diagnosticRows=[];
+let diagnosticError="";
+let diagnosticActiveApp="atlas-prod";
+let diagnosticPages={"atlas-prod":1,"caesar-prod":1,"atlas-dev":1,"caesar-dev":1};
+const DIAG_PAGE_SIZE=10;
 
 function ptDateKey(ts){
   const p=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(ts));
@@ -654,6 +651,113 @@ function cardHtml(app){
     :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
   </section>`;
 }
+
+function decodeDiagDoc(doc){const f=(doc&&doc.fields)||{},o={};Object.keys(f).forEach(k=>{const v=f[k];if("stringValue" in v)o[k]=v.stringValue;else if("integerValue" in v)o[k]=Number(v.integerValue);else if("booleanValue" in v)o[k]=!!v.booleanValue;else if("timestampValue" in v)o[k]=v.timestampValue});o._name=doc&&doc.name||"";return o}
+async function fetchDiagnostics(){
+  const headers=await sharedHeaders();
+  const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents:runQuery`;
+  const body={structuredQuery:{from:[{collectionId:DIAG_COLLECTION}],orderBy:[{field:{fieldPath:"occurredAt"},direction:"DESCENDING"}],limit:DIAG_LIMIT}};
+  const res=await fetch(url,{method:"POST",headers,body:JSON.stringify(body),cache:"no-store"});const raw=await res.text();
+  if(!res.ok)throw new Error(`Diagnostic read HTTP ${res.status}: ${raw.slice(0,200)}`);
+  const rows=raw?JSON.parse(raw):[];diagnosticRows=(Array.isArray(rows)?rows:[]).filter(x=>x&&x.document).map(x=>decodeDiagDoc(x.document));
+  diagnosticError="";
+  // This diagnostic query is also SENTINEL-caused Firestore activity.
+  try{await recordSentinelSharedActivity(Math.max(1,diagnosticRows.length))}catch(e){console.error("SENTINEL diagnostic telemetry:",e)}
+  return diagnosticRows;
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+async function setDiagnosticConfirmed(row,confirmed,checkbox){
+  if(!row||!row._name)return;
+  if(checkbox)checkbox.disabled=true;
+  try{
+    const headers=await sharedHeaders();
+    const url=`https://firestore.googleapis.com/v1/${row._name}?updateMask.fieldPaths=confirmed`;
+    const body={fields:{confirmed:{booleanValue:!!confirmed}}};
+    const res=await fetch(url,{method:"PATCH",headers,body:JSON.stringify(body),cache:"no-store"});
+    const raw=await res.text();
+    if(!res.ok)throw new Error(`Diagnostic confirm HTTP ${res.status}: ${raw.slice(0,200)}`);
+    row.confirmed=!!confirmed;
+    renderDiagnostics();
+    try{await recordSentinelSharedActivity(0)}catch(e){console.error("SENTINEL diagnostic confirm telemetry:",e)}
+  }catch(e){
+    if(checkbox){checkbox.checked=!confirmed;checkbox.disabled=false}
+    alert("確認状態を保存できませんでした。\n"+(e.message||String(e)));
+  }
+}
+async function deleteDiagnostic(row,button){
+  if(!row||!row._name)return;
+  if(!confirm("このエラーログを削除しますか？\n削除後は元に戻せません。"))return;
+  if(button)button.disabled=true;
+  try{
+    const headers=await sharedHeaders();
+    const url=`https://firestore.googleapis.com/v1/${row._name}`;
+    const res=await fetch(url,{method:"DELETE",headers,cache:"no-store"});
+    const raw=await res.text();
+    if(!res.ok)throw new Error(`Diagnostic delete HTTP ${res.status}: ${raw.slice(0,200)}`);
+    const idx=diagnosticRows.indexOf(row);
+    if(idx>=0)diagnosticRows.splice(idx,1);
+    const appId=row.appId||diagnosticActiveApp;
+    const appCount=diagnosticRows.filter(r=>r.appId===appId).length;
+    const pageCount=Math.max(1,Math.ceil(appCount/DIAG_PAGE_SIZE));
+    diagnosticPages[appId]=Math.min(diagnosticPages[appId]||1,pageCount);
+    renderDiagnostics();
+    try{await recordSentinelSharedActivity(0)}catch(e){console.error("SENTINEL diagnostic delete telemetry:",e)}
+  }catch(e){
+    if(button)button.disabled=false;
+    alert("エラーログを削除できませんでした。\n"+(e.message||String(e)));
+  }
+}
+
+function renderDiagnostics(){
+  const list=document.getElementById("diagList");if(!list)return;
+  if(diagnosticError){list.className="diag-empty";list.textContent=diagnosticError;return}
+  const groups=[
+    {id:"atlas-prod",label:"ATLAS"},
+    {id:"caesar-prod",label:"CAESAR"},
+    {id:"atlas-dev",label:"ATLAS-Development"},
+    {id:"caesar-dev",label:"Dev-CAESAR"}
+  ];
+
+  const sectionFor=group=>{
+    const appRows=diagnosticRows.filter(r=>r.appId===group.id);
+    const pageCount=Math.max(1,Math.ceil(appRows.length/DIAG_PAGE_SIZE));
+    let page=diagnosticPages[group.id]||1;
+    if(page>pageCount)page=pageCount;
+    if(page<1)page=1;
+    diagnosticPages[group.id]=page;
+    const start=(page-1)*DIAG_PAGE_SIZE;
+    const pageRows=appRows.slice(start,start+DIAG_PAGE_SIZE);
+
+    const table=pageRows.length?`<table class="diag-table"><thead><tr><th>発生時刻</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th><th>確認 / 削除</th></tr></thead><tbody>${pageRows.map(r=>{
+      const idx=diagnosticRows.indexOf(r),confirmed=r.confirmed===true;
+      return `<tr class="${confirmed?"diag-row-confirmed":"diag-row-unconfirmed"}"><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></td><td>${esc(r.location)}</td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td>${esc(r.detail||"")}</td><td><div class="diag-actions"><label class="diag-confirm"><input type="checkbox" data-diag-index="${idx}" ${confirmed?"checked":""}><span class="${confirmed?"state-confirmed":"state-unconfirmed"}">${confirmed?"確認済み":"未確認"}</span></label><button class="diag-delete" type="button" data-diag-delete-index="${idx}">削除</button></div></td></tr>`;
+    }).join("")}</tbody></table>`:`<div class="diag-app-empty">通報なし</div>`;
+
+    const pages=pageCount>1?`<div class="diag-pages" data-diag-app-pages="${group.id}"><button data-diag-page-app="${group.id}" data-diag-page="${page-1}" ${page===1?"disabled":""}>‹</button>${Array.from({length:pageCount},(_,i)=>`<button data-diag-page-app="${group.id}" data-diag-page="${i+1}" class="${page===i+1?"active":""}">${i+1}</button>`).join("")}<button data-diag-page-app="${group.id}" data-diag-page="${page+1}" ${page===pageCount?"disabled":""}>›</button></div>`:"";
+
+    return `<section class="diag-app-section"><div class="diag-app-head"><div class="diag-app-title">${esc(group.label)}</div><div class="diag-app-count">${appRows.length}件</div></div><div class="diag-table-wrap">${table}</div>${pages}</section>`;
+  };
+
+  list.className="";
+  list.innerHTML=groups.map(sectionFor).join("");
+
+  list.querySelectorAll("button[data-diag-page-app][data-diag-page]").forEach(b=>b.addEventListener("click",()=>{
+    const appId=b.dataset.diagPageApp;
+    const p=Number(b.dataset.diagPage);
+    const appCount=diagnosticRows.filter(r=>r.appId===appId).length;
+    const pageCount=Math.max(1,Math.ceil(appCount/DIAG_PAGE_SIZE));
+    if(p>=1&&p<=pageCount){diagnosticPages[appId]=p;renderDiagnostics()}
+  }));
+  list.querySelectorAll('input[type="checkbox"][data-diag-index]').forEach(cb=>cb.addEventListener("change",()=>{
+    const row=diagnosticRows[Number(cb.dataset.diagIndex)];setDiagnosticConfirmed(row,cb.checked,cb)
+  }));
+  list.querySelectorAll('button[data-diag-delete-index]').forEach(btn=>btn.addEventListener("click",()=>{
+    const row=diagnosticRows[Number(btn.dataset.diagDeleteIndex)];deleteDiagnostic(row,btn)
+  }));
+}
+async function refreshDiagnostics(){const b=document.getElementById("diagRefreshBtn");if(b){b.disabled=true;b.textContent="↻ 取得中"}try{await fetchDiagnostics()}catch(e){diagnosticError=e.message||String(e)}renderDiagnostics();if(b){b.disabled=false;b.textContent="↻ 再読込"}}
+function setSentinelView(which){const monitor=which==="monitor";document.getElementById("monitorView").classList.toggle("active",monitor);document.getElementById("diagnosticsView").classList.toggle("active",!monitor);document.getElementById("navMonitor").classList.toggle("active",monitor);document.getElementById("navDiagnostics").classList.toggle("active",!monitor);if(!monitor)refreshDiagnostics()}
+
 function render(){
   document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(cardHtml).join("");
   document.getElementById("devGrid").innerHTML=APPS.filter(a=>a.group==="dev").map(cardHtml).join("");
@@ -678,6 +782,10 @@ document.querySelectorAll(".refreshBtn").forEach(btn=>btn.addEventListener("clic
 window.addEventListener("resize",()=>setTimeout(render,60));
 document.querySelector(".notice").innerHTML="v1.0 SHARED UI：ATLAS / CAESARが記録した1分粒度のTelemetryを共有Firestoreから取得して表示します。グラフは1時間＝1分単位、24時間・PT当日＝1時間単位、1週間・1ヶ月＝1日単位の折れ線です。『共有中』は直近25分以内に受信あり、『未受信』は受信なし／直近25分以内の受信なしを示します。『異常検知なし』はPT当日の推計使用量が警告域（各無料枠80%以上）に達していないことを示します。";
 
+document.getElementById("navMonitor").addEventListener("click",()=>setSentinelView("monitor"));
+document.getElementById("navDiagnostics").addEventListener("click",()=>setSentinelView("diagnostics"));
+document.getElementById("diagRefreshBtn").addEventListener("click",refreshDiagnostics);
+
 // Keep the intentional white splash briefly visible, then fade to the dark dashboard.
 // This does not try to suppress iOS' native white launch frame; it visually connects to it.
 window.addEventListener("load",()=>{
@@ -692,76 +800,6 @@ window.addEventListener("load",()=>{
 
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
-
-
-/* ===== Central Diagnostics UI v4 ===== */
-const DIAG_COLLECTION="sentinelDiagnostics";
-const DIAG_PAGE_SIZE=10;
-const DIAG_APPS=[
-  {id:"atlas-prod",name:"ATLAS"},
-  {id:"caesar-prod",name:"CAESAR"},
-  {id:"atlas-dev",name:"ATLAS-Development"},
-  {id:"caesar-dev",name:"Dev-CAESAR"}
-];
-let diagRows=[];
-let diagActiveApp="atlas-prod";
-const diagPages=Object.fromEntries(DIAG_APPS.map(a=>[a.id,1]));
-function diagDecode(v){
-  if(!v)return null;
-  if("stringValue" in v)return v.stringValue;
-  if("integerValue" in v)return Number(v.integerValue);
-  if("doubleValue" in v)return Number(v.doubleValue);
-  if("booleanValue" in v)return !!v.booleanValue;
-  if("timestampValue" in v)return v.timestampValue;
-  return null;
-}
-function diagDecodeDoc(doc){const o={};Object.entries((doc&&doc.fields)||{}).forEach(([k,v])=>o[k]=diagDecode(v));o._name=doc&&doc.name||"";o._id=o._name.split("/").pop();return o}
-function diagEsc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function diagFmt(t){try{return new Date(t).toLocaleString("ja-JP")}catch(_){return String(t||"—")}}
-async function fetchDiagnostics(){
-  const headers=await sharedHeaders();
-  const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents:runQuery`;
-  const body={structuredQuery:{from:[{collectionId:DIAG_COLLECTION}],orderBy:[{field:{fieldPath:"occurredAt"},direction:"DESCENDING"}],limit:500}};
-  const res=await fetch(url,{method:"POST",headers,body:JSON.stringify(body),cache:"no-store"});
-  const raw=await res.text();if(!res.ok)throw new Error(`Diagnostics read HTTP ${res.status}: ${raw.slice(0,240)}`);
-  diagRows=(raw?JSON.parse(raw):[]).filter(x=>x&&x.document).map(x=>diagDecodeDoc(x.document));
-}
-async function setDiagnosticChecked(row,checked){
-  const headers=await sharedHeaders();
-  const url=`https://firestore.googleapis.com/v1/${row._name}?updateMask.fieldPaths=checked`;
-  const res=await fetch(url,{method:"PATCH",headers,body:JSON.stringify({fields:{checked:{booleanValue:!!checked}}}),cache:"no-store"});
-  if(!res.ok){const raw=await res.text();throw new Error(`確認状態の保存 HTTP ${res.status}: ${raw.slice(0,240)}`)}
-  row.checked=!!checked;
-}
-async function deleteDiagnostic(row){
-  const headers=await sharedHeaders();
-  const res=await fetch(`https://firestore.googleapis.com/v1/${row._name}`,{method:"DELETE",headers,cache:"no-store"});
-  if(!res.ok){const raw=await res.text();throw new Error(`ログ削除 HTTP ${res.status}: ${raw.slice(0,240)}`)}
-  diagRows=diagRows.filter(x=>x._name!==row._name);
-}
-function renderDiagTabs(){
-  const el=document.getElementById("diagAppTabs");if(!el)return;
-  el.innerHTML=DIAG_APPS.map(a=>{const n=diagRows.filter(r=>r.appId===a.id).length;return `<button class="diag-app-tab ${a.id===diagActiveApp?"active":""}" data-diag-app="${a.id}">${a.name} <span>${n}</span></button>`}).join("");
-}
-function renderDiagnostics(){
-  renderDiagTabs();const app=DIAG_APPS.find(a=>a.id===diagActiveApp)||DIAG_APPS[0];
-  const rows=diagRows.filter(r=>r.appId===diagActiveApp);const pages=Math.max(1,Math.ceil(rows.length/DIAG_PAGE_SIZE));
-  diagPages[diagActiveApp]=Math.min(Math.max(1,diagPages[diagActiveApp]||1),pages);const page=diagPages[diagActiveApp];
-  const shown=rows.slice((page-1)*DIAG_PAGE_SIZE,page*DIAG_PAGE_SIZE);
-  document.getElementById("diagTitle").textContent=app.name;document.getElementById("diagCount").textContent=`${rows.length}件`;
-  document.getElementById("diagBody").innerHTML=shown.length?`<div class="diag-table-wrap"><table class="diag-table"><thead><tr><th>確認</th><th>発生時刻</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th><th>削除</th></tr></thead><tbody>${shown.map(r=>`<tr class="${r.checked?"checked":""}" data-diag-id="${diagEsc(r._id)}"><td><label class="diag-status"><input class="diag-check" type="checkbox" ${r.checked?"checked":""}><span class="diag-dot"></span>${r.checked?"確認済":"未確認"}</label></td><td>${diagEsc(diagFmt(r.occurredAt))}</td><td>${diagEsc(r.category||"—")}</td><td>${diagEsc(r.location||"—")}</td><td>${diagEsc(r.httpStatus??"—")}</td><td>${r.online===false?"offline":"online"}</td><td>${diagEsc(r.appVersion||"—")}</td><td>${diagEsc(r.detail||"—")}</td><td><button class="diag-delete">削除</button></td></tr>`).join("")}</tbody></table></div>`:`<div class="diag-empty">通報なし</div>`;
-  document.getElementById("diagPager").innerHTML=pages>1?Array.from({length:pages},(_,i)=>`<button data-diag-page="${i+1}" class="${i+1===page?"active":""}">${i+1}</button>`).join(""):"";
-}
-async function refreshDiagnostics(){
-  document.getElementById("diagError").innerHTML="";
-  try{await fetchDiagnostics();renderDiagnostics()}catch(e){document.getElementById("diagError").innerHTML=`<div class="diag-error">${diagEsc(e.message||e)}</div>`;console.error(e)}
-}
-document.querySelectorAll(".page-tab").forEach(b=>b.addEventListener("click",async()=>{document.querySelectorAll(".page-tab").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".sentinel-page").forEach(x=>x.classList.toggle("active",x.id===`page-${b.dataset.page}`));if(b.dataset.page==="diagnostics")await refreshDiagnostics()}));
-document.getElementById("diagAppTabs").addEventListener("click",e=>{const b=e.target.closest("[data-diag-app]");if(!b)return;diagActiveApp=b.dataset.diagApp;renderDiagnostics()});
-document.getElementById("diagPager").addEventListener("click",e=>{const b=e.target.closest("[data-diag-page]");if(!b)return;diagPages[diagActiveApp]=Number(b.dataset.diagPage)||1;renderDiagnostics()});
-document.getElementById("diagBody").addEventListener("change",async e=>{if(!e.target.classList.contains("diag-check"))return;const tr=e.target.closest("tr[data-diag-id]");const row=diagRows.find(r=>r._id===tr.dataset.diagId);if(!row)return;e.target.disabled=true;try{await setDiagnosticChecked(row,e.target.checked);renderDiagnostics()}catch(err){e.target.checked=!e.target.checked;document.getElementById("diagError").innerHTML=`<div class="diag-error">${diagEsc(err.message||err)}</div>`}finally{e.target.disabled=false}});
-document.getElementById("diagBody").addEventListener("click",async e=>{const b=e.target.closest(".diag-delete");if(!b)return;const tr=b.closest("tr[data-diag-id]");const row=diagRows.find(r=>r._id===tr.dataset.diagId);if(!row)return;if(!confirm("このエラー通報を削除しますか？"))return;b.disabled=true;try{await deleteDiagnostic(row);renderDiagnostics()}catch(err){document.getElementById("diagError").innerHTML=`<div class="diag-error">${diagEsc(err.message||err)}</div>`}finally{b.disabled=false}});
-
 </script>
 
 </body>
