@@ -123,13 +123,22 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 .notify-btn:disabled{opacity:.55;cursor:default}
 .notify-state{font-size:9.5px;color:var(--muted)}
 
-.push-diag{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px;background:#10181e;font-size:11px;line-height:1.6}.push-diag-grid{display:grid;grid-template-columns:180px 1fr;gap:6px 10px}.push-diag .ok{color:#9bd7b4}.push-diag .bad{color:#f0aaaa}.push-diag .warn{color:#e3c68b}.push-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.push-actions button{border:1px solid var(--line);background:#111a20;color:var(--ink);padding:8px 11px;border-radius:8px;font-size:11px;cursor:pointer}
+.push-diag{margin:12px 0 14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#10181e;font-size:11px;line-height:1.6}
+.push-diag-title{font-weight:800;margin-bottom:7px}
+.push-diag-grid{display:grid;grid-template-columns:minmax(120px,180px) 1fr;gap:6px 10px}
+.push-diag .ok{color:#9bd7b4}.push-diag .bad{color:#f0aaaa}.push-diag .warn{color:#e3c68b}
+.push-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.push-actions button{border:1px solid var(--line);background:#111a20;color:var(--ink);padding:8px 11px;border-radius:8px;font-size:11px;cursor:pointer}
+.push-diag-detail{margin-top:8px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+@media(max-width:560px){
+  .push-diag-grid{grid-template-columns:1fr}
+}
+
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
-<script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 
 <link rel="manifest" href="manifest.json">
@@ -161,12 +170,14 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
     v0.1 LOCAL：同じブラウザ・同じ origin に保存されたSENTINEL Telemetryを読み取ります。
     Google Cloud Monitoring / Firestoreへの監視用通信は行いません。表示値はアプリ起因の推計値です。
   </div>
+
   <div class="push-diag" id="pushDiagBox">
-    <div style="font-weight:800;margin-bottom:6px">Push診断</div>
+    <div class="push-diag-title">Push診断</div>
     <div class="push-diag-grid" id="pushDiagGrid"></div>
+    <div class="push-diag-detail" id="pushDiagDetail"></div>
     <div class="push-actions">
-      <button id="pushDiagRefresh">診断を更新</button>
-      <button id="pushEnableBtn">通知を有効化</button>
+      <button id="pushDiagRefresh" type="button">診断を更新</button>
+      <button id="pushEnableBtn" type="button">通知を有効化</button>
     </div>
   </div>
 
@@ -782,7 +793,10 @@ function setSentinelView(which){const monitor=which==="monitor";document.getElem
 
 
 function pushSupported(){
-  return "serviceWorker" in navigator && "Notification" in window && typeof firebase!=="undefined" && !!firebase.messaging;
+  return "serviceWorker" in navigator &&
+    "Notification" in window &&
+    typeof firebase!=="undefined" &&
+    typeof firebase.messaging==="function";
 }
 
 function isStandalonePwa(){
@@ -795,8 +809,65 @@ function setNotifyUi_(text,enabled=false,busy=false){
   if(s)s.textContent=text;
 }
 
+function pushDiagRow_(label,value,state){
+  const cls=state==="ok"?"ok":state==="bad"?"bad":"warn";
+  return `<div>${label}</div><div class="${cls}">${esc(value)}</div>`;
+}
+
+async function collectPushDiagnostics_(tryRegister=false){
+  const rows=[];
+  const detail=[];
+  rows.push(["Secure Context",window.isSecureContext?"○":"×",window.isSecureContext?"ok":"bad"]);
+  rows.push(["Push API","PushManager" in window?"○":"×","PushManager" in window?"ok":"bad"]);
+  rows.push(["Notification","Notification" in window?"○":"×","Notification" in window?"ok":"bad"]);
+  rows.push(["Service Worker","serviceWorker" in navigator?"○":"×","serviceWorker" in navigator?"ok":"bad"]);
+  rows.push(["PWA standalone",isStandalonePwa()?"○":"×",isStandalonePwa()?"ok":"warn"]);
+  rows.push(["通知許可",("Notification" in window)?Notification.permission:"利用不可",("Notification" in window && Notification.permission==="granted")?"ok":"warn"]);
+
+  try{
+    await waitForFirebase();
+    rows.push(["Firebase SDK","○","ok"]);
+    rows.push(["FCM Messaging",typeof firebase.messaging==="function"?"○":"×",typeof firebase.messaging==="function"?"ok":"bad"]);
+  }catch(e){
+    rows.push(["Firebase SDK","×","bad"]);
+    rows.push(["FCM Messaging","×","bad"]);
+    detail.push("Firebase SDK: "+(e.message||String(e)));
+  }
+
+  if(!FCM_VAPID_PUBLIC_KEY || FCM_VAPID_PUBLIC_KEY.startsWith("PASTE_")){
+    rows.push(["VAPID公開鍵","未設定","bad"]);
+  }else{
+    rows.push(["VAPID公開鍵","設定済み","ok"]);
+  }
+
+  if("serviceWorker" in navigator){
+    try{
+      const existing=await navigator.serviceWorker.getRegistration("./");
+      if(existing){
+        rows.push(["SW登録","登録済み","ok"]);
+        detail.push("SW: "+(existing.active?.scriptURL||existing.waiting?.scriptURL||existing.installing?.scriptURL||"登録あり"));
+      }else if(tryRegister){
+        const reg=await navigator.serviceWorker.register("./firebase-messaging-sw.js",{scope:"./"});
+        await navigator.serviceWorker.ready;
+        rows.push(["SW登録","成功","ok"]);
+        detail.push("SW: "+(reg.active?.scriptURL||reg.waiting?.scriptURL||reg.installing?.scriptURL||"登録成功"));
+      }else{
+        rows.push(["SW登録","未登録","warn"]);
+      }
+    }catch(e){
+      rows.push(["SW登録","失敗","bad"]);
+      detail.push("SW登録: "+(e.name||"Error")+" / "+(e.message||String(e)));
+    }
+  }
+
+  const grid=document.getElementById("pushDiagGrid");
+  const det=document.getElementById("pushDiagDetail");
+  if(grid)grid.innerHTML=rows.map(r=>pushDiagRow_(...r)).join("");
+  if(det)det.textContent=detail.join("\n");
+  return rows;
+}
+
 function subscriberDocId_(token){
-  // Firestore document IDに巨大なFCM tokenを直接使わず、SHA-256で固定長ID化する。
   return crypto.subtle.digest("SHA-256",new TextEncoder().encode(token)).then(buf=>
     [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("")
   );
@@ -806,12 +877,12 @@ async function savePushSubscriber_(token){
   const headers=await sharedHeaders();
   const docId=await subscriberDocId_(token);
   const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents/${PUSH_SUBSCRIBER_COLLECTION}/${docId}`;
+  const nowIso=new Date().toISOString();
   const body={fields:{
     token:{stringValue:token},
-    platform:{stringValue:navigator.platform||"web"},
-    userAgent:{stringValue:(navigator.userAgent||"").slice(0,500)},
-    enabled:{booleanValue:true},
-    updatedAt:{timestampValue:new Date().toISOString()}
+    createdAt:{timestampValue:nowIso},
+    updatedAt:{timestampValue:nowIso},
+    enabled:{booleanValue:true}
   }};
   const res=await fetch(url,{method:"PATCH",headers,body:JSON.stringify(body),cache:"no-store"});
   const raw=await res.text();
@@ -820,43 +891,87 @@ async function savePushSubscriber_(token){
 
 async function enablePushNotifications(){
   const btn=document.getElementById("notifyBtn");
+  const diagBtn=document.getElementById("pushEnableBtn");
   try{
     setNotifyUi_("設定中…",false,true);
+    if(diagBtn)diagBtn.disabled=true;
+
+    await waitForFirebase();
     await initShared();
-    if(!pushSupported())throw new Error("このブラウザではWeb Pushを利用できません");
+
+    if(!("serviceWorker" in navigator))throw new Error("Service Worker非対応");
+    if(!("Notification" in window))throw new Error("Notification API非対応");
+    if(!("PushManager" in window))throw new Error("Push API非対応");
+    if(typeof firebase.messaging!=="function")throw new Error("Firebase Messaging SDK未読込");
+
     if(/iPad|iPhone|iPod/.test(navigator.userAgent) && !isStandalonePwa()){
       throw new Error("iPhone/iPadではSENTINELをホーム画面に追加し、そのアイコンから開いてください");
     }
     if(!FCM_VAPID_PUBLIC_KEY || FCM_VAPID_PUBLIC_KEY.startsWith("PASTE_")){
       throw new Error("FCM_VAPID_PUBLIC_KEY が未設定です");
     }
+
     const permission=await Notification.requestPermission();
     if(permission!=="granted")throw new Error("通知が許可されませんでした");
-    const reg=await navigator.serviceWorker.register("firebase-messaging-sw.js",{scope:"./"});
+
+    const reg=await navigator.serviceWorker.register("./firebase-messaging-sw.js",{scope:"./"});
     await navigator.serviceWorker.ready;
+
     sharedMessaging=sharedApp.messaging();
-    const token=await sharedMessaging.getToken({vapidKey:FCM_VAPID_PUBLIC_KEY,serviceWorkerRegistration:reg});
+    const token=await sharedMessaging.getToken({
+      vapidKey:FCM_VAPID_PUBLIC_KEY,
+      serviceWorkerRegistration:reg
+    });
     if(!token)throw new Error("FCMトークンを取得できませんでした");
+
     await savePushSubscriber_(token);
     localStorage.setItem("sentinelPushEnabled","1");
     setNotifyUi_("この端末はPush受信登録済み",true,false);
+    await collectPushDiagnostics_(false);
   }catch(e){
     console.error("SENTINEL Push setup:",e);
     setNotifyUi_("設定失敗",false,false);
+    const det=document.getElementById("pushDiagDetail");
+    if(det)det.textContent="設定失敗: "+(e.name||"Error")+" / "+(e.message||String(e));
+    await collectPushDiagnostics_(false).catch(()=>{});
     alert("Push通知を有効化できませんでした。\n"+(e.message||String(e)));
-  }finally{if(btn)btn.disabled=false;}
+  }finally{
+    if(btn)btn.disabled=false;
+    if(diagBtn)diagBtn.disabled=false;
+  }
 }
 
 async function initPushUi(){
   const b=document.getElementById("notifyBtn");
-  if(!b)return;
-  b.addEventListener("click",enablePushNotifications);
-  if(!pushSupported()){setNotifyUi_("Web Push非対応",false,true);return;}
-  if(Notification.permission==="denied"){setNotifyUi_("通知がブラウザ設定で拒否されています",false,false);return;}
+  const d=document.getElementById("pushDiagRefresh");
+  const e=document.getElementById("pushEnableBtn");
+  if(b)b.addEventListener("click",enablePushNotifications);
+  if(d)d.addEventListener("click",()=>collectPushDiagnostics_(true));
+  if(e)e.addEventListener("click",enablePushNotifications);
+
+  // Critical fix: the Firebase scripts above use `defer`.
+  // Wait until they have actually executed before deciding that Web Push is unsupported.
+  try{
+    await waitForFirebase();
+  }catch(_){}
+
+  await collectPushDiagnostics_(false);
+
+  if(!pushSupported()){
+    setNotifyUi_("Push診断を確認",false,false);
+    return;
+  }
+  if(Notification.permission==="denied"){
+    setNotifyUi_("通知がブラウザ設定で拒否されています",false,false);
+    return;
+  }
   if(Notification.permission==="granted" && localStorage.getItem("sentinelPushEnabled")==="1"){
     setNotifyUi_("登録済み",true,false);
-  }else setNotifyUi_("未設定",false,false);
+  }else{
+    setNotifyUi_("未設定",false,false);
+  }
 }
+
 
 function render(){
   document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(cardHtml).join("");
@@ -898,81 +1013,7 @@ window.addEventListener("load",()=>{
   },MIN_SPLASH_MS);
 },{once:true});
 
-initPushUi();
-
-// ===== Push diagnostic v2 =====
-const FCM_VAPID_PUBLIC_KEY = (typeof window.FCM_VAPID_PUBLIC_KEY_OVERRIDE!=="undefined"?window.FCM_VAPID_PUBLIC_KEY_OVERRIDE:"PASTE_YOUR_PUBLIC_VAPID_KEY_HERE");
-let sentinelMessaging=null;
-function isStandalonePwa(){return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;}
-function pushSupportSnapshot(){
-  const hasSW='serviceWorker' in navigator;
-  const hasNotif='Notification' in window;
-  const hasPush='PushManager' in window;
-  const hasFirebase=typeof window.firebase!== 'undefined';
-  const hasMessaging=hasFirebase && typeof firebase.messaging==='function';
-  return {hasSW,hasNotif,hasPush,hasFirebase,hasMessaging,standalone:isStandalonePwa(),permission:hasNotif?Notification.permission:'n/a'};
-}
-function diagRow(label,val,kind=''){return `<div>${label}</div><div class="${kind}">${val}</div>`;}
-async function renderPushDiagnostics(extra={}){
-  const box=document.getElementById('pushDiagGrid'); if(!box)return;
-  const s=pushSupportSnapshot();
-  let swState=extra.swState||'未確認';
-  let fcmState=extra.fcmState||'未確認';
-  if(s.hasSW){
-    try{const reg=await navigator.serviceWorker.getRegistration(); swState=reg?('登録済み: '+(reg.active?.scriptURL||reg.installing?.scriptURL||reg.waiting?.scriptURL||'')):'未登録';}catch(e){swState='確認失敗: '+e.message;}
-  }
-  if(s.hasFirebase && s.hasMessaging){
-    try{ sentinelMessaging=sentinelMessaging||firebase.messaging(); fcmState='Messaging初期化可'; }catch(e){ fcmState='Messaging初期化失敗: '+e.message; }
-  }
-  const rows=[
-    ['Push API',s.hasPush?'○':'×',s.hasPush?'ok':'bad'],
-    ['Notification',s.hasNotif?'○':'×',s.hasNotif?'ok':'bad'],
-    ['Service Worker',s.hasSW?'○':'×',s.hasSW?'ok':'bad'],
-    ['Firebase SDK',s.hasFirebase?'○':'×',s.hasFirebase?'ok':'bad'],
-    ['FCM Messaging',s.hasMessaging?'○':'×',s.hasMessaging?'ok':'bad'],
-    ['PWA standalone',s.standalone?'○':'×',s.standalone?'ok':'warn'],
-    ['通知許可',s.permission,s.permission==='granted'?'ok':(s.permission==='denied'?'bad':'warn')],
-    ['SW登録',swState,swState.startsWith('登録済み')?'ok':(swState.includes('失敗')?'bad':'warn')],
-    ['FCM状態',fcmState,fcmState==='Messaging初期化可'?'ok':(fcmState.includes('失敗')?'bad':'warn')],
-    ['FCM token',extra.tokenState||'未取得',extra.tokenState==='取得成功'?'ok':(String(extra.tokenState||'').includes('失敗')?'bad':'warn')]
-  ];
-  box.innerHTML=rows.map(r=>diagRow(...r)).join('');
-}
-async function enableSentinelPushV2(){
-  const btn=document.getElementById('pushEnableBtn'); if(btn){btn.disabled=true;btn.textContent='処理中…';}
-  let swState='未確認',fcmState='未確認',tokenState='未取得';
-  try{
-    const s=pushSupportSnapshot();
-    if(!s.hasSW||!s.hasNotif||!s.hasPush) throw new Error('Push API / Notification / Service Worker のいずれかが利用不可');
-    if(!s.standalone) throw new Error('ホーム画面から起動したPWAではありません');
-    if(FCM_VAPID_PUBLIC_KEY==='PASTE_YOUR_PUBLIC_VAPID_KEY_HERE') throw new Error('VAPID公開鍵が未設定です');
-    const permission=await Notification.requestPermission();
-    if(permission!=='granted') throw new Error('通知許可が granted ではありません: '+permission);
-    const reg=await navigator.serviceWorker.register('./firebase-messaging-sw.js',{scope:'./'});
-    await navigator.serviceWorker.ready;
-    swState='登録済み: '+(reg.active?.scriptURL||reg.installing?.scriptURL||reg.waiting?.scriptURL||'firebase-messaging-sw.js');
-    await waitForFirebase();
-    if(typeof firebase.messaging!=='function') throw new Error('firebase-messaging-compat.js が読み込まれていません');
-    sentinelMessaging=sentinelMessaging||firebase.messaging();
-    fcmState='Messaging初期化可';
-    const token=await sentinelMessaging.getToken({vapidKey:FCM_VAPID_PUBLIC_KEY,serviceWorkerRegistration:reg});
-    if(!token) throw new Error('FCM token が空です');
-    tokenState='取得成功';
-    localStorage.setItem('sentinelFcmToken',token);
-  }catch(e){
-    console.error('SENTINEL Push enable failed',e);
-    tokenState='失敗: '+(e&&e.message?e.message:String(e));
-  }finally{
-    await renderPushDiagnostics({swState,fcmState,tokenState});
-    if(btn){btn.disabled=false;btn.textContent='通知を有効化';}
-  }
-}
-window.addEventListener('load',()=>{
-  document.getElementById('pushDiagRefresh')?.addEventListener('click',()=>renderPushDiagnostics());
-  document.getElementById('pushEnableBtn')?.addEventListener('click',enableSentinelPushV2);
-  setTimeout(()=>renderPushDiagnostics(),1200);
-},{once:true});
-
+window.addEventListener("load",()=>{ initPushUi().catch(e=>console.error("Push UI init:",e)); },{once:true});
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
 </script>
