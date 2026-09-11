@@ -12,21 +12,6 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage((payload) => {
-  const notification = payload.notification || {};
-  const data = payload.data || {};
-
-  const title = notification.title || data.title || "SENTINEL";
-  const options = {
-    body: notification.body || data.body || "SENTINELから通知があります。",
-    icon: "./icons/home-icon.png",
-    badge: "./icons/home-icon.png",
-    data
-  };
-
-  self.registration.showNotification(title, options);
-});
-
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
