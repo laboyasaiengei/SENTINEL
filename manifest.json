@@ -1,0 +1,13 @@
+{
+  "name": "SENTINEL 運用監視・早期警戒システム",
+  "short_name": "SENTINEL",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d1318",
+  "theme_color": "#0d1318",
+  "icons": [
+    {"src":"icons/home-icon.png","sizes":"192x192","type":"image/png"},
+    {"src":"icons/home-icon.png","sizes":"512x512","type":"image/png"}
+  ]
+}
