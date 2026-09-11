@@ -562,6 +562,50 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   }
 }
 
+
+/* v10 mobile: PT / connection status as a matched two-column row */
+@media(max-width:640px){
+  .header-right{
+    grid-template-columns:1fr 1fr auto!important;
+    grid-template-rows:auto auto!important;
+    grid-template-areas:
+      "pt shared notify"
+      "nav nav nav"!important;
+    width:100%!important;
+    justify-items:stretch!important;
+    align-items:center!important;
+  }
+
+  #ptDate,#liveBadge{
+    width:100%!important;
+    max-width:none!important;
+    min-width:0!important;
+    height:24px!important;
+    box-sizing:border-box!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    padding:2px 5px!important;
+    border-radius:6px!important;
+    font-size:9px!important;
+    line-height:1!important;
+    text-align:center!important;
+  }
+
+  #ptDate{grid-area:pt!important}
+  #liveBadge{grid-area:shared!important}
+
+  .notification-control{
+    grid-area:notify!important;
+    width:30px!important;
+  }
+
+  .diag-nav{
+    grid-area:nav!important;
+    margin-top:0!important;
+  }
+}
+
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
