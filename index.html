@@ -221,6 +221,132 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   .refreshBtn{width:100%;min-height:34px}
 }
 
+
+/* v6 mobile header refinement */
+.range-refresh{
+  border-left:1px solid var(--line)!important;
+  border-radius:0 7px 7px 0!important;
+  min-width:38px;
+  font-weight:800;
+  color:#c7d8e0!important;
+}
+.rangeSeg .range-refresh:hover{background:#20313b}
+
+.diag-detail-box,
+.diag-detail-box .v,
+.diag-detail-box .k,
+.diag-detail-note{
+  font-size:10px!important;
+}
+.diag-detail-box .v{line-height:1.45}
+.diag-detail-box .k{line-height:1.45}
+.diag-detail-note{line-height:1.5}
+
+@media(max-width:640px){
+  .header-inner{padding:8px 10px 9px}
+  .brand-row{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:8px;
+    align-items:start;
+  }
+  .brand-logo-wrap{
+    width:auto;
+    min-width:0;
+    padding-top:0;
+    margin:0;
+    justify-content:flex-start;
+  }
+  .brand-logo{
+    width:min(190px,52vw);
+    max-width:100%;
+    max-height:46px;
+    object-fit:contain;
+    object-position:left center;
+  }
+  .header-right{
+    width:auto;
+    min-width:0;
+    margin-left:0;
+    display:grid;
+    grid-template-columns:auto auto;
+    grid-template-areas:
+      "pt pt"
+      "shared shared"
+      "notify notify"
+      "nav nav";
+    gap:5px 6px;
+    justify-items:end;
+    align-items:center;
+  }
+  #ptDate{grid-area:pt}
+  #liveBadge{grid-area:shared}
+  .notification-control{
+    grid-area:notify;
+    display:flex;
+    gap:6px;
+    align-items:center;
+    justify-content:flex-end;
+  }
+  .notify-btn{
+    width:auto!important;
+    min-width:0!important;
+    min-height:32px;
+    padding:5px 9px;
+    white-space:nowrap;
+    font-size:10px;
+  }
+  .notify-state{
+    max-width:92px;
+    text-align:right;
+    line-height:1.2;
+    font-size:9px;
+  }
+  .diag-nav{
+    grid-area:nav;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:5px;
+    margin-top:0;
+    width:100%;
+  }
+  .diag-nav button{
+    min-height:32px;
+    padding:6px 7px;
+    font-size:10px;
+  }
+  .pill{
+    padding:4px 7px;
+    font-size:9px;
+  }
+  main{padding:10px}
+  .toolbar{display:block;margin-bottom:10px}
+  .segment{
+    width:100%;
+    display:flex;
+    overflow-x:auto;
+    justify-content:flex-start;
+    -webkit-overflow-scrolling:touch;
+  }
+  .segment button{
+    flex:0 0 auto;
+    min-height:34px;
+    padding:7px 9px;
+  }
+  .range-refresh{
+    position:sticky;
+    right:0;
+    background:#111a20!important;
+    z-index:1;
+  }
+  footer{
+    padding:0 10px;
+    margin-top:18px;
+    font-size:10px;
+    line-height:1.5;
+  }
+}
+
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -253,10 +379,6 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 
 <main>
   <div id="monitorView" class="diag-panel active">
-  <div class="notice">
-    v0.1 LOCAL：同じブラウザ・同じ origin に保存されたSENTINEL Telemetryを読み取ります。
-    Google Cloud Monitoring / Firestoreへの監視用通信は行いません。表示値はアプリ起因の推計値です。
-  </div>
   <div class="toolbar">
     <div class="segment rangeSeg" id="rangeSeg">
       <button data-range="hour">1時間</button>
@@ -264,8 +386,8 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
       <button data-range="week">1週間</button>
       <button data-range="month">1ヶ月</button>
       <button data-range="quotaDayPT" class="active">PT当日</button>
+      <button class="refreshBtn range-refresh" id="refreshBtn" type="button">↻</button>
     </div>
-    <button class="ghost refreshBtn" id="refreshBtn">↻ 再読込</button>
   </div>
   <div class="grid" id="prodGrid"></div>
 
@@ -276,8 +398,8 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
       <button data-range="week">1週間</button>
       <button data-range="month">1ヶ月</button>
       <button data-range="quotaDayPT" class="active">PT当日</button>
+      <button class="refreshBtn range-refresh" type="button">↻</button>
     </div>
-    <button class="ghost refreshBtn">↻ 再読込</button>
   </div>
   <div class="grid" id="devGrid"></div>
   </div>
@@ -288,8 +410,7 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 </main>
 
 <footer>
-  SENTINEL v1.0 SHARED UI · free-tier reference: reads 50,000/day, writes 20,000/day, deletes 20,000/day.
-  Shared Telemetry dashboard · 1時間 / 24時間 / 1週間 / 1ヶ月 / PT当日。
+  SENTINELはATLAS / CAESAR各系統の共有Telemetryとエラーログを監視します。表示期間は1時間・24時間・1週間・1ヶ月・PT当日。PT当日では無料枠に対する使用率を表示します。
 </footer>
 
 
@@ -641,20 +762,36 @@ function quotaAlerts(s){
     else if(p>=80)out.push({type:"warn",text:`${k.toUpperCase()} ${p.toFixed(1)}% — 注意域`});
   });return out;
 }
+
+function chartIsMobile_(){
+  return window.matchMedia && window.matchMedia("(max-width:640px)").matches;
+}
+
+function chartTickStep_(range, ptsLength){
+  const mobile=chartIsMobile_();
+  if(range==="week") return mobile?2:1;
+  if(range==="month") return mobile?6:5;
+  if(range==="hour") return mobile?15:10;       // minutes
+  if(range==="day24") return mobile?6:4;       // hours
+  if(range==="quotaDayPT") return mobile?6:4;  // hours
+  return 1;
+}
+
 function rangeLabel(r){return ({hour:"1時間",day24:"24時間",week:"1週間",month:"1ヶ月",quotaDayPT:"PT当日"})[r]||r}
 function drawChart(canvas,id){
   const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
   canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));ctx.scale(dpr,dpr);
   ctx.clearRect(0,0,w,h);
   const pts=seriesForApp(id,selectedRange);
-  const L=46,R=34,T=10,B=30,pw=Math.max(1,w-L-R),ph=Math.max(1,h-T-B);
+  const mobileAxis=chartIsMobile_();
+  const L=46,R=34,T=10,B=mobileAxis?46:30,pw=Math.max(1,w-L-R),ph=Math.max(1,h-T-B);
   if(!pts.length){ctx.fillStyle="#72838d";ctx.font="11px sans-serif";ctx.fillText("No shared telemetry",L+10,T+ph/2);return}
 
   const rawMax=Math.max(1,...pts.flatMap(p=>[p.reads,p.writes,p.deletes]));
   const pow=Math.pow(10,Math.floor(Math.log10(rawMax))),n=rawMax/pow;
   const nice=(n<=1?1:n<=2?2:n<=5?5:10)*pow,ymax=Math.max(4,nice);
 
-  ctx.font="10px sans-serif";ctx.textBaseline="middle";
+  ctx.font=(chartIsMobile_()?"9px sans-serif":"10px sans-serif");ctx.textBaseline="middle";
   for(let i=0;i<=4;i++){
     const val=Math.round(ymax*(4-i)/4),y=T+ph*i/4;
     ctx.strokeStyle=i===4?"#52636d":"#263741";ctx.lineWidth=1;
@@ -666,12 +803,12 @@ function drawChart(canvas,id){
   const tickIdx=[];
 
 if(selectedRange==="week"){
-  // 1週間：1日ごと
-  for(let i=0;i<pts.length;i++) tickIdx.push(i);
+  const step=chartTickStep_("week",pts.length);
+  for(let i=0;i<pts.length;i++) if(i%step===0 || i===pts.length-1) tickIdx.push(i);
 
 }else if(selectedRange==="month"){
-  // 1ヶ月：日別集計。横軸ラベルは5日おき＋最終日で過密を避ける。
-  for(let i=0;i<pts.length;i++) if(i%5===0 || i===pts.length-1) tickIdx.push(i);
+  const step=chartTickStep_("month",pts.length);
+  for(let i=0;i<pts.length;i++) if(i%step===0 || i===pts.length-1) tickIdx.push(i);
 
 }else{
   pts.forEach((p,i)=>{
@@ -686,24 +823,26 @@ if(selectedRange==="week"){
     const mm=Number(parts.find(x=>x.type==="minute")?.value||0);
 
     if(selectedRange==="hour"){
-      // 1時間：10分ごとに表示
-      if(mm%10===0) tickIdx.push(i);
+      const step=chartTickStep_("hour",pts.length);
+      if(mm%step===0) tickIdx.push(i);
 
     }else if(selectedRange==="day24"){
-      // 24時間：4時間ごと。長い時刻軸でもラベル同士を重ねない
-      if(mm===0 && hh%4===0) tickIdx.push(i);
+      const step=chartTickStep_("day24",pts.length);
+      if(mm===0 && hh%step===0) tickIdx.push(i);
 
     }else if(selectedRange==="quotaDayPT"){
-      // PT当日：4時間ごと。長い時刻軸でもラベル同士を重ねない
-      if(mm===0 && hh%4===0) tickIdx.push(i);
+      const step=chartTickStep_("quotaDayPT",pts.length);
+      if(mm===0 && hh%step===0) tickIdx.push(i);
     }
   });
 
   if(!tickIdx.length) tickIdx.push(pts.length-1);
 }
 
-  ctx.textBaseline="top";ctx.fillStyle="#71838d";
-  [...new Set(tickIdx)].forEach((idx,j,arr)=>{
+  ctx.fillStyle="#71838d";
+  const mobileLabels=chartIsMobile_();
+  const uniqueTicks=[...new Set(tickIdx)];
+  uniqueTicks.forEach((idx,j,arr)=>{
     const p=pts[idx],x=pts.length===1?L+pw/2:L+idx/(pts.length-1)*pw;
     let label;
     if(selectedRange==="week" || selectedRange==="month"){
@@ -712,9 +851,21 @@ if(selectedRange==="week"){
     }else{
       label=new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(p.ts));
     }
-    ctx.textAlign=j===0?"left":j===arr.length-1?"right":"center";
-    const tx=j===0?Math.max(L,x):j===arr.length-1?Math.min(L+pw,x):x;
-    ctx.fillText(label,tx,T+ph+7);
+
+    if(mobileLabels){
+      ctx.save();
+      ctx.translate(x,T+ph+9);
+      ctx.rotate(-Math.PI/4);
+      ctx.textAlign="right";
+      ctx.textBaseline="top";
+      ctx.fillText(label,0,0);
+      ctx.restore();
+    }else{
+      ctx.textBaseline="top";
+      ctx.textAlign=j===0?"left":j===arr.length-1?"right":"center";
+      const tx=j===0?Math.max(L,x):j===arr.length-1?Math.min(L+pw,x):x;
+      ctx.fillText(label,tx,T+ph+7);
+    }
   });
 
   const c=getComputedStyle(document.documentElement);
@@ -1112,10 +1263,10 @@ function render(){
 }
 async function refresh(){
   const btns=[...document.querySelectorAll(".refreshBtn")];
-  btns.forEach(btn=>{btn.disabled=true;btn.textContent="↻ 取得中";});
+  btns.forEach(btn=>{btn.disabled=true;btn.textContent="…";});
   try{await fetchShared();}catch(e){lastRemoteError=e.message||String(e);console.error(e);}
   render();
-  btns.forEach(btn=>{btn.disabled=false;btn.textContent="↻ 再読込";});
+  btns.forEach(btn=>{btn.disabled=false;btn.textContent="↻";});
 }
 document.querySelectorAll(".rangeSeg").forEach(seg=>seg.addEventListener("click",async e=>{
   const b=e.target.closest("button[data-range]");if(!b)return;
@@ -1125,7 +1276,6 @@ document.querySelectorAll(".rangeSeg").forEach(seg=>seg.addEventListener("click"
 }));
 document.querySelectorAll(".refreshBtn").forEach(btn=>btn.addEventListener("click",refresh));
 window.addEventListener("resize",()=>setTimeout(render,60));
-document.querySelector(".notice").innerHTML="v1.0 SHARED UI：ATLAS / CAESARが記録した1分粒度のTelemetryを共有Firestoreから取得して表示します。グラフは1時間＝1分単位、24時間・PT当日＝1時間単位、1週間・1ヶ月＝1日単位の折れ線です。『共有中』は直近25分以内に受信あり、『未受信』は受信なし／直近25分以内の受信なしを示します。『異常検知なし』はPT当日の推計使用量が警告域（各無料枠80%以上）に達していないことを示します。";
 
 document.getElementById("navMonitor").addEventListener("click",()=>setSentinelView("monitor"));
 document.getElementById("navDiagnostics").addEventListener("click",()=>setSentinelView("diagnostics"));
