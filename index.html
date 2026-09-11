@@ -516,6 +516,52 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   }
 }
 
+
+/* v9 header/navigation refinements */
+@media(max-width:640px){
+  .diag-nav{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    width:100%!important;
+    gap:4px!important;
+    margin-top:2px!important;
+  }
+  .diag-nav button{
+    min-height:24px!important;
+    height:24px!important;
+    padding:2px 4px!important;
+    font-size:9px!important;
+    line-height:1!important;
+    border-radius:6px!important;
+  }
+
+  .notification-control{
+    grid-area:notify!important;
+    display:flex!important;
+    width:auto!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+  }
+  .notify-btn{
+    width:30px!important;
+    min-width:30px!important;
+    max-width:30px!important;
+    height:30px!important;
+    min-height:30px!important;
+    padding:0!important;
+    border-radius:999px!important;
+    display:grid!important;
+    place-items:center!important;
+    font-size:16px!important;
+    line-height:1!important;
+  }
+
+  #ptDate,#liveBadge{
+    max-width:92px!important;
+    font-size:8.5px!important;
+  }
+}
+
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -537,9 +583,9 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
     <div class="brand-row">
       <div class="brand-logo-wrap"><img class="brand-logo" src="icons/logo.png" alt="SENTINEL 運用監視・早期警戒システム"></div>
       <div class="header-right">
-        <span id="ptDate" class="pill">PT quota day —</span>
-        <span id="liveBadge" class="pill ok">接続準備中</span>
-        <div class="notification-control"><button id="notifyBtn" class="notify-btn" type="button">通知を有効化</button><span id="notifyState" class="notify-state">未設定</span></div>
+        <span id="ptDate" class="pill">PT —</span>
+        <span id="liveBadge" class="pill ok">接続待ち</span>
+        <div class="notification-control"><button id="notifyBtn" class="notify-btn" type="button" aria-label="通知を有効化" title="通知を有効化">🔔</button><span id="notifyState" class="notify-state">未設定</span></div>
         <div class="diag-nav"><button id="navMonitor" class="active">アクティビティモニター</button><button id="navDiagnostics">エラーリスト</button></div>
       </div>
     </div>
@@ -1055,15 +1101,14 @@ if(selectedRange==="week"){
     });
     ctx.stroke();
 
-    // 1時間集約/日集約では各点を軽く可視化。1分表示は線のみ。
-    if(selectedRange!=="hour"){
-      pts.forEach((p,i)=>{
-        if(!p[key])return;
-        const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
-        const y=T+ph-(p[key]/ymax)*ph;
-        ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill();
-      });
-    }
+    // 全レンジで各点を可視化。1時間表示は点数が多いので少し小さめ。
+    const pointRadius=selectedRange==="hour"?1.4:2;
+    pts.forEach((p,i)=>{
+      if(!p[key])return;
+      const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
+      const y=T+ph-(p[key]/ymax)*ph;
+      ctx.beginPath();ctx.arc(x,y,pointRadius,0,Math.PI*2);ctx.fill();
+    });
   });
 
 }
@@ -1233,15 +1278,13 @@ function isStandalonePwa(){
 
 function setNotifyUi_(text,enabled=false,busy=false){
   const b=document.getElementById("notifyBtn"),s=document.getElementById("notifyState");
-  const pb=document.getElementById("pushEnableBtn");
   if(b){
     b.disabled=busy;
     b.classList.toggle("enabled",enabled);
-    b.textContent=enabled?"通知を解除":"通知を有効化";
-  }
-  if(pb){
-    pb.disabled=busy;
-    pb.textContent=enabled?"通知を解除":"通知を有効化";
+    b.textContent=enabled?"🔔":"🔕";
+    const label=enabled?"通知を解除":"通知を有効化";
+    b.setAttribute("aria-label",label);
+    b.title=label;
   }
   if(s)s.textContent=text;
 }
@@ -1426,14 +1469,34 @@ async function initPushUi(){
 function render(){
   document.getElementById("prodGrid").innerHTML=APPS.filter(a=>a.group==="prod").map(cardHtml).join("");
   document.getElementById("devGrid").innerHTML=APPS.filter(a=>a.group==="dev").map(cardHtml).join("");
-  document.getElementById("ptDate").textContent=`PT quota day ${ptDateKey(Date.now())}`;
-  document.getElementById("liveBadge").textContent=lastRemoteError?"SHARED ERROR":"SHARED FIRESTORE";
+  const ptKey=ptDateKey(Date.now());
+  const [,ptM,ptD]=ptKey.split("-");
+  document.getElementById("ptDate").textContent=`PT ${Number(ptM)}/${Number(ptD)}`;
+  const badge=document.getElementById("liveBadge");
+  if(lastRemoteError){
+    badge.textContent="エラー";
+    badge.classList.remove("ok");
+  }else{
+    badge.textContent="接続済み";
+    badge.classList.add("ok");
+  }
   document.querySelectorAll(".card[data-app]").forEach(c=>{const cv=c.querySelector("canvas");if(cv)drawChart(cv,c.dataset.app)});
 }
 async function refresh(){
   const btns=[...document.querySelectorAll(".refreshBtn")];
+  const badge=document.getElementById("liveBadge");
   btns.forEach(btn=>{btn.disabled=true;btn.textContent="…";});
-  try{await fetchShared();}catch(e){lastRemoteError=e.message||String(e);console.error(e);}
+  if(badge){
+    badge.textContent="読込中";
+    badge.classList.remove("ok");
+  }
+  try{
+    await fetchShared();
+    lastRemoteError="";
+  }catch(e){
+    lastRemoteError=e.message||String(e);
+    console.error(e);
+  }
   render();
   btns.forEach(btn=>{btn.disabled=false;btn.textContent="↻";});
 }
