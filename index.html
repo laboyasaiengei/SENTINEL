@@ -347,6 +347,175 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   }
 }
 
+
+/* v8 final mobile corrections */
+@media(max-width:640px){
+  /* iPhone / PWA safe area: keep the logo below the status bar / Dynamic Island area */
+  .header-inner{
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 12px)
+      10px
+      9px!important;
+  }
+
+  /* First row: full logo on the left, compact status/notification block on the right */
+  .brand-row{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:8px!important;
+    align-items:start!important;
+  }
+  .brand-logo-wrap{
+    width:auto!important;
+    min-width:0!important;
+    padding-top:7px!important;
+    margin:0!important;
+    justify-content:flex-start!important;
+    overflow:visible!important;
+  }
+  .brand-logo{
+    display:block!important;
+    width:min(176px,46vw)!important;
+    max-width:100%!important;
+    max-height:none!important;
+    height:auto!important;
+    object-fit:contain!important;
+    object-position:left center!important;
+  }
+
+  .header-right{
+    width:auto!important;
+    min-width:0!important;
+    margin:0!important;
+    display:grid!important;
+    grid-template-columns:auto auto!important;
+    grid-template-rows:auto auto auto!important;
+    grid-template-areas:
+      "pt notify"
+      "shared notify"
+      "nav nav"!important;
+    gap:4px 6px!important;
+    align-items:center!important;
+    justify-items:end!important;
+  }
+  #ptDate{grid-area:pt!important}
+  #liveBadge{grid-area:shared!important}
+
+  .notification-control{
+    grid-area:notify!important;
+    display:flex!important;
+    width:auto!important;
+    gap:0!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+  }
+  .notify-btn{
+    width:auto!important;
+    min-width:0!important;
+    max-width:none!important;
+    min-height:30px!important;
+    padding:5px 8px!important;
+    white-space:nowrap!important;
+    font-size:9.5px!important;
+  }
+  /* Status text is redundant on narrow phones; button itself shows 有効化 / 解除 */
+  .notify-state{display:none!important}
+
+  .pill{
+    max-width:112px!important;
+    padding:3px 6px!important;
+    font-size:8.5px!important;
+    line-height:1.15!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+
+  .diag-nav{
+    grid-area:nav!important;
+    width:100%!important;
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:4px!important;
+    margin-top:3px!important;
+  }
+  .diag-nav button{
+    width:100%!important;
+    min-height:30px!important;
+    padding:5px 6px!important;
+    font-size:9.5px!important;
+  }
+
+  main{padding:10px!important}
+
+  /* Range buttons + reload: ONE ROW. Nothing disappears and reload is simply the far-right item. */
+  .toolbar{
+    display:block!important;
+    width:100%!important;
+    margin-bottom:10px!important;
+  }
+  .segment.rangeSeg{
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) 34px!important;
+    width:100%!important;
+    overflow:visible!important;
+    padding:3px!important;
+    gap:0!important;
+  }
+  .segment.rangeSeg button{
+    min-width:0!important;
+    width:auto!important;
+    min-height:34px!important;
+    padding:6px 2px!important;
+    font-size:9.5px!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:clip!important;
+  }
+  .segment.rangeSeg .range-refresh{
+    position:static!important;
+    right:auto!important;
+    min-width:34px!important;
+    width:34px!important;
+    padding:6px 0!important;
+    border-left:1px solid var(--line)!important;
+    border-radius:0 7px 7px 0!important;
+    background:#111a20!important;
+    z-index:auto!important;
+  }
+
+  /* Error details: same visual scale as the surrounding 11px error table. */
+  .diag-detail-cell{
+    padding:8px 10px!important;
+    font-size:11px!important;
+    -webkit-text-size-adjust:none!important;
+    text-size-adjust:none!important;
+  }
+  .diag-detail-box{
+    grid-template-columns:88px minmax(0,1fr)!important;
+    gap:4px 8px!important;
+    padding:8px!important;
+    font-size:11px!important;
+    line-height:1.35!important;
+    -webkit-text-size-adjust:none!important;
+    text-size-adjust:none!important;
+  }
+  .diag-detail-box .k,
+  .diag-detail-box .v,
+  .diag-detail-note{
+    font-size:11px!important;
+    line-height:1.35!important;
+    -webkit-text-size-adjust:none!important;
+    text-size-adjust:none!important;
+  }
+  .diag-detail-box .k{font-weight:600!important}
+  .diag-detail-note{
+    grid-column:1/-1!important;
+    margin-top:3px!important;
+    padding-top:6px!important;
+  }
+}
+
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
