@@ -123,15 +123,102 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 .notify-btn:disabled{opacity:.55;cursor:default}
 .notify-state{font-size:9.5px;color:var(--muted)}
 
-.push-diag{margin:12px 0 14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#10181e;font-size:11px;line-height:1.6}
-.push-diag-title{font-weight:800;margin-bottom:7px}
-.push-diag-grid{display:grid;grid-template-columns:minmax(120px,180px) 1fr;gap:6px 10px}
-.push-diag .ok{color:#9bd7b4}.push-diag .bad{color:#f0aaaa}.push-diag .warn{color:#e3c68b}
-.push-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.push-actions button{border:1px solid var(--line);background:#111a20;color:var(--ink);padding:8px 11px;border-radius:8px;font-size:11px;cursor:pointer}
-.push-diag-detail{margin-top:8px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
-@media(max-width:560px){
-  .push-diag-grid{grid-template-columns:1fr}
+.diag-click{
+  border:0;background:transparent;color:inherit;padding:0;margin:0;
+  font:inherit;text-align:left;cursor:pointer;text-decoration:underline;
+  text-decoration-style:dotted;text-underline-offset:3px
+}
+.diag-click:hover{color:#d8edf7}
+.diag-detail-row{display:none}
+.diag-detail-row.open{display:table-row}
+.diag-detail-cell{background:#0e171c!important;padding:12px 14px!important}
+.diag-detail-box{
+  display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;
+  padding:10px;border:1px solid #2b3c46;border-radius:10px;background:#111b21
+}
+.diag-detail-box .k{color:#82949e;font-size:10px;font-weight:700}
+.diag-detail-box .v{color:#d8e4ea;font-size:11px;word-break:break-word;white-space:pre-wrap}
+.diag-detail-note{
+  grid-column:1/-1;margin-top:4px;padding-top:8px;border-top:1px solid #263640;
+  color:#9fb0b9;font-size:10px;line-height:1.55
+}
+@media(max-width:640px){
+  .diag-detail-box{grid-template-columns:1fr}
+  .diag-detail-note{grid-column:1}
+}
+
+
+@media(max-width:640px){
+  .header-inner{padding:10px 10px 9px}
+  .brand-row{display:block}
+  .brand-logo-wrap{
+    width:100%;
+    padding-top:0;
+    justify-content:center;
+    margin-bottom:8px;
+  }
+  .brand-logo{
+    width:min(165px,62vw);
+    max-height:42px;
+  }
+  .header-right{
+    width:100%;
+    margin-left:0;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+    align-items:stretch;
+  }
+  .header-right > .pill{
+    min-width:0;
+    text-align:center;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .notification-control{
+    grid-column:1 / -1;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:6px;
+    align-items:center;
+  }
+  .notify-btn{
+    width:100%;
+    min-height:36px;
+    font-size:11px;
+  }
+  .notify-state{
+    max-width:120px;
+    text-align:right;
+    line-height:1.25;
+  }
+  .diag-nav{
+    grid-column:1 / -1;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+    margin-top:0;
+  }
+  .diag-nav button{
+    width:100%;
+    min-height:36px;
+    padding:7px 6px;
+    font-size:10.5px;
+  }
+  main{padding:12px 10px}
+  .toolbar{gap:6px}
+  .segment{
+    width:100%;
+    overflow-x:auto;
+    justify-content:flex-start;
+    -webkit-overflow-scrolling:touch;
+  }
+  .segment button{
+    flex:0 0 auto;
+    min-height:34px;
+  }
+  .refreshBtn{width:100%;min-height:34px}
 }
 
 </style>
@@ -170,17 +257,6 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
     v0.1 LOCAL：同じブラウザ・同じ origin に保存されたSENTINEL Telemetryを読み取ります。
     Google Cloud Monitoring / Firestoreへの監視用通信は行いません。表示値はアプリ起因の推計値です。
   </div>
-
-  <div class="push-diag" id="pushDiagBox">
-    <div class="push-diag-title">Push診断</div>
-    <div class="push-diag-grid" id="pushDiagGrid"></div>
-    <div class="push-diag-detail" id="pushDiagDetail"></div>
-    <div class="push-actions">
-      <button id="pushDiagRefresh" type="button">診断を更新</button>
-      <button id="pushEnableBtn" type="button">通知を有効化</button>
-    </div>
-  </div>
-
   <div class="toolbar">
     <div class="segment rangeSeg" id="rangeSeg">
       <button data-range="hour">1時間</button>
@@ -556,7 +632,7 @@ function metricHtml(label,val,lim,quotaMode){
   const p=quotaMode?pct(val,lim):0,sev=severity(p);
   return `<div class="metric"><div class="label">${label}</div><div class="value">${fmt(val)}</div>
   <div class="pct">${quotaMode?p.toFixed(1)+"% of daily free tier":"selected range"}</div>
-  <div class="limit">1日上限 ${fmt(lim)}</div>
+  ${quotaMode?`<div class="limit">1日上限 ${fmt(lim)}</div>`:""}
   <div class="bar"><div class="fill ${sev}" style="width:${quotaMode?Math.min(100,p):0}%"></div></div></div>`;
 }
 function quotaAlerts(s){
@@ -741,6 +817,33 @@ async function deleteDiagnostic(row,button){
   }
 }
 
+
+function diagnosticDetailHtml_(r){
+  const genericDetail=/^(SCRIPT|LINK|IMG|RESOURCE|GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)?$/i.test(String(r.detail||"").trim());
+  const app=APPS.find(a=>a.id===r.appId);
+  const rows=[
+    ["アプリ",app?.name||r.appId||"—"],
+    ["発生時刻",r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—"],
+    ["分類",r.category||"—"],
+    ["場所",r.location||"—"],
+    ["HTTP",r.httpStatus==null?"—":String(r.httpStatus)],
+    ["通信",r.online===false?"offline":"online"],
+    ["Version",r.appVersion||"—"],
+    ["詳細",r.detail||"—"],
+    ["確認状態",r.checked===true?"確認済み":"未確認"],
+    ["ログID",(r._name||"").split("/").pop()||"—"]
+  ];
+  const note=genericDetail
+    ?"この通報に保存されている詳細情報はここまでです。SCRIPTなどの汎用値しかない過去ログは、SENTINEL側だけでは元のURLや例外本文を復元できません。今後さらに詳しくする場合は、ATLAS/CAESAR側の通報内容も拡張します。"
+    :"クリックしたログに保存されている技術情報を表示しています。";
+  return `<div class="diag-detail-box">${rows.map(([k,v])=>`<div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>`).join("")}<div class="diag-detail-note">${esc(note)}</div></div>`;
+}
+
+function toggleDiagnosticDetail_(idx){
+  const row=document.querySelector(`tr[data-diag-detail-row="${idx}"]`);
+  if(row)row.classList.toggle("open");
+}
+
 function renderDiagnostics(){
   const list=document.getElementById("diagList");if(!list)return;
   if(diagnosticError){list.className="diag-empty";list.textContent=diagnosticError;return}
@@ -763,7 +866,9 @@ function renderDiagnostics(){
 
     const table=pageRows.length?`<table class="diag-table"><thead><tr><th>発生時刻</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th><th>確認 / 削除</th></tr></thead><tbody>${pageRows.map(r=>{
       const idx=diagnosticRows.indexOf(r),confirmed=r.checked===true;
-      return `<tr class="${confirmed?"diag-row-confirmed":"diag-row-unconfirmed"}"><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></td><td>${esc(r.location)}</td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td>${esc(r.detail||"")}</td><td><div class="diag-actions"><label class="diag-confirm"><input type="checkbox" data-diag-index="${idx}" ${confirmed?"checked":""}><span class="${confirmed?"state-confirmed":"state-unconfirmed"}">${confirmed?"確認済み":"未確認"}</span></label><button class="diag-delete" type="button" data-diag-delete-index="${idx}">削除</button></div></td></tr>`;
+      const main=`<tr class="${confirmed?"diag-row-confirmed":"diag-row-unconfirmed"}"><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td><button type="button" class="diag-click" data-diag-open="${idx}"><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></button></td><td><button type="button" class="diag-click" data-diag-open="${idx}">${esc(r.location)}</button></td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td><button type="button" class="diag-click" data-diag-open="${idx}">${esc(r.detail||"—")}</button></td><td><div class="diag-actions"><label class="diag-confirm"><input type="checkbox" data-diag-index="${idx}" ${confirmed?"checked":""}><span class="${confirmed?"state-confirmed":"state-unconfirmed"}">${confirmed?"確認済み":"未確認"}</span></label><button class="diag-delete" type="button" data-diag-delete-index="${idx}">削除</button></div></td></tr>`;
+      const detail=`<tr class="diag-detail-row" data-diag-detail-row="${idx}"><td colspan="8" class="diag-detail-cell">${diagnosticDetailHtml_(r)}</td></tr>`;
+      return main+detail;
     }).join("")}</tbody></table>`:`<div class="diag-app-empty">通報なし</div>`;
 
     const pages=pageCount>1?`<div class="diag-pages" data-diag-app-pages="${group.id}"><button data-diag-page-app="${group.id}" data-diag-page="${page-1}" ${page===1?"disabled":""}>‹</button>${Array.from({length:pageCount},(_,i)=>`<button data-diag-page-app="${group.id}" data-diag-page="${i+1}" class="${page===i+1?"active":""}">${i+1}</button>`).join("")}<button data-diag-page-app="${group.id}" data-diag-page="${page+1}" ${page===pageCount?"disabled":""}>›</button></div>`:"";
@@ -780,6 +885,9 @@ function renderDiagnostics(){
     const appCount=diagnosticRows.filter(r=>r.appId===appId).length;
     const pageCount=Math.max(1,Math.ceil(appCount/DIAG_PAGE_SIZE));
     if(p>=1&&p<=pageCount){diagnosticPages[appId]=p;renderDiagnostics()}
+  }));
+  list.querySelectorAll('button[data-diag-open]').forEach(btn=>btn.addEventListener("click",()=>{
+    toggleDiagnosticDetail_(Number(btn.dataset.diagOpen));
   }));
   list.querySelectorAll('input[type="checkbox"][data-diag-index]').forEach(cb=>cb.addEventListener("change",()=>{
     const row=diagnosticRows[Number(cb.dataset.diagIndex)];setDiagnosticConfirmed(row,cb.checked,cb)
@@ -805,7 +913,16 @@ function isStandalonePwa(){
 
 function setNotifyUi_(text,enabled=false,busy=false){
   const b=document.getElementById("notifyBtn"),s=document.getElementById("notifyState");
-  if(b){b.disabled=busy;b.classList.toggle("enabled",enabled);b.textContent=enabled?"通知 有効":"通知を有効化";}
+  const pb=document.getElementById("pushEnableBtn");
+  if(b){
+    b.disabled=busy;
+    b.classList.toggle("enabled",enabled);
+    b.textContent=enabled?"通知を解除":"通知を有効化";
+  }
+  if(pb){
+    pb.disabled=busy;
+    pb.textContent=enabled?"通知を解除":"通知を有効化";
+  }
   if(s)s.textContent=text;
 }
 
@@ -815,57 +932,19 @@ function pushDiagRow_(label,value,state){
 }
 
 async function collectPushDiagnostics_(tryRegister=false){
-  const rows=[];
-  const detail=[];
-  rows.push(["Secure Context",window.isSecureContext?"○":"×",window.isSecureContext?"ok":"bad"]);
-  rows.push(["Push API","PushManager" in window?"○":"×","PushManager" in window?"ok":"bad"]);
-  rows.push(["Notification","Notification" in window?"○":"×","Notification" in window?"ok":"bad"]);
-  rows.push(["Service Worker","serviceWorker" in navigator?"○":"×","serviceWorker" in navigator?"ok":"bad"]);
-  rows.push(["PWA standalone",isStandalonePwa()?"○":"×",isStandalonePwa()?"ok":"warn"]);
-  rows.push(["通知許可",("Notification" in window)?Notification.permission:"利用不可",("Notification" in window && Notification.permission==="granted")?"ok":"warn"]);
-
   try{
     await waitForFirebase();
-    rows.push(["Firebase SDK","○","ok"]);
-    rows.push(["FCM Messaging",typeof firebase.messaging==="function"?"○":"×",typeof firebase.messaging==="function"?"ok":"bad"]);
-  }catch(e){
-    rows.push(["Firebase SDK","×","bad"]);
-    rows.push(["FCM Messaging","×","bad"]);
-    detail.push("Firebase SDK: "+(e.message||String(e)));
-  }
-
-  if(!FCM_VAPID_PUBLIC_KEY || FCM_VAPID_PUBLIC_KEY.startsWith("PASTE_")){
-    rows.push(["VAPID公開鍵","未設定","bad"]);
-  }else{
-    rows.push(["VAPID公開鍵","設定済み","ok"]);
-  }
-
-  if("serviceWorker" in navigator){
-    try{
-      const existing=await navigator.serviceWorker.getRegistration("./");
-      if(existing){
-        rows.push(["SW登録","登録済み","ok"]);
-        detail.push("SW: "+(existing.active?.scriptURL||existing.waiting?.scriptURL||existing.installing?.scriptURL||"登録あり"));
-      }else if(tryRegister){
-        const reg=await navigator.serviceWorker.register("./firebase-messaging-sw.js",{scope:"./"});
-        await navigator.serviceWorker.ready;
-        rows.push(["SW登録","成功","ok"]);
-        detail.push("SW: "+(reg.active?.scriptURL||reg.waiting?.scriptURL||reg.installing?.scriptURL||"登録成功"));
-      }else{
-        rows.push(["SW登録","未登録","warn"]);
-      }
-    }catch(e){
-      rows.push(["SW登録","失敗","bad"]);
-      detail.push("SW登録: "+(e.name||"Error")+" / "+(e.message||String(e)));
+    if(tryRegister && "serviceWorker" in navigator){
+      await navigator.serviceWorker.register("./firebase-messaging-sw.js",{scope:"./"});
+      await navigator.serviceWorker.ready;
     }
+    return true;
+  }catch(e){
+    console.warn("Push check:",e);
+    return false;
   }
-
-  const grid=document.getElementById("pushDiagGrid");
-  const det=document.getElementById("pushDiagDetail");
-  if(grid)grid.innerHTML=rows.map(r=>pushDiagRow_(...r)).join("");
-  if(det)det.textContent=detail.join("\n");
-  return rows;
 }
+
 
 function subscriberDocId_(token){
   return crypto.subtle.digest("SHA-256",new TextEncoder().encode(token)).then(buf=>
@@ -891,10 +970,8 @@ async function savePushSubscriber_(token){
 
 async function enablePushNotifications(){
   const btn=document.getElementById("notifyBtn");
-  const diagBtn=document.getElementById("pushEnableBtn");
   try{
     setNotifyUi_("設定中…",false,true);
-    if(diagBtn)diagBtn.disabled=true;
 
     await waitForFirebase();
     await initShared();
@@ -926,43 +1003,96 @@ async function enablePushNotifications(){
 
     await savePushSubscriber_(token);
     localStorage.setItem("sentinelPushEnabled","1");
+    localStorage.setItem("sentinelPushToken",token);
     setNotifyUi_("この端末はPush受信登録済み",true,false);
     await collectPushDiagnostics_(false);
   }catch(e){
     console.error("SENTINEL Push setup:",e);
     setNotifyUi_("設定失敗",false,false);
-    const det=document.getElementById("pushDiagDetail");
-    if(det)det.textContent="設定失敗: "+(e.name||"Error")+" / "+(e.message||String(e));
     await collectPushDiagnostics_(false).catch(()=>{});
     alert("Push通知を有効化できませんでした。\n"+(e.message||String(e)));
   }finally{
     if(btn)btn.disabled=false;
-    if(diagBtn)diagBtn.disabled=false;
   }
+}
+
+
+async function disablePushNotifications(){
+  const btn=document.getElementById("notifyBtn");
+  try{
+    setNotifyUi_("解除中…",true,true);
+
+    await waitForFirebase();
+    await initShared();
+
+    let token=localStorage.getItem("sentinelPushToken")||"";
+
+    // 旧版でtokenをlocalStorageに保存していない端末でも現在tokenを再取得して解除できるようにする。
+    if(!token && "serviceWorker" in navigator && typeof firebase.messaging==="function"){
+      const reg=await navigator.serviceWorker.getRegistration("./");
+      if(reg){
+        sharedMessaging=sharedApp.messaging();
+        try{
+          token=await sharedMessaging.getToken({
+            vapidKey:FCM_VAPID_PUBLIC_KEY,
+            serviceWorkerRegistration:reg
+          })||"";
+        }catch(_){}
+      }
+    }
+
+    if(token){
+      const headers=await sharedHeaders();
+      const docId=await subscriberDocId_(token);
+      const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents/${PUSH_SUBSCRIBER_COLLECTION}/${docId}?updateMask.fieldPaths=enabled&updateMask.fieldPaths=updatedAt`;
+      const body={fields:{
+        enabled:{booleanValue:false},
+        updatedAt:{timestampValue:new Date().toISOString()}
+      }};
+      const res=await fetch(url,{method:"PATCH",headers,body:JSON.stringify(body),cache:"no-store"});
+      const raw=await res.text();
+      if(!res.ok)throw new Error(`Push subscriber disable HTTP ${res.status}: ${raw.slice(0,300)}`);
+
+      // FCM側の購読も解除。失敗してもFirestore側でenabled=falseなら通知対象外になる。
+      try{
+        sharedMessaging=sharedMessaging||sharedApp.messaging();
+        await sharedMessaging.deleteToken(token);
+      }catch(e){
+        console.warn("FCM token delete skipped:",e);
+      }
+    }
+
+    localStorage.removeItem("sentinelPushEnabled");
+    localStorage.removeItem("sentinelPushToken");
+    setNotifyUi_("この端末のPush通知は解除済み",false,false);
+    await collectPushDiagnostics_(false);
+  }catch(e){
+    console.error("SENTINEL Push disable:",e);
+    setNotifyUi_("解除失敗",true,false);
+    alert("Push通知を解除できませんでした。\\n"+(e.message||String(e)));
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+
+async function togglePushNotifications(){
+  const enabled=localStorage.getItem("sentinelPushEnabled")==="1";
+  if(enabled) return disablePushNotifications();
+  return enablePushNotifications();
 }
 
 async function initPushUi(){
   const b=document.getElementById("notifyBtn");
-  const d=document.getElementById("pushDiagRefresh");
-  const e=document.getElementById("pushEnableBtn");
-  if(b)b.addEventListener("click",enablePushNotifications);
-  if(d)d.addEventListener("click",()=>collectPushDiagnostics_(true));
-  if(e)e.addEventListener("click",enablePushNotifications);
+  if(b)b.addEventListener("click",togglePushNotifications);
 
-  // Critical fix: the Firebase scripts above use `defer`.
-  // Wait until they have actually executed before deciding that Web Push is unsupported.
-  try{
-    await waitForFirebase();
-  }catch(_){}
-
-  await collectPushDiagnostics_(false);
+  try{await waitForFirebase();}catch(_){}
 
   if(!pushSupported()){
-    setNotifyUi_("Push診断を確認",false,false);
+    setNotifyUi_("Push非対応",false,false);
     return;
   }
   if(Notification.permission==="denied"){
-    setNotifyUi_("通知がブラウザ設定で拒否されています",false,false);
+    setNotifyUi_("通知拒否",false,false);
     return;
   }
   if(Notification.permission==="granted" && localStorage.getItem("sentinelPushEnabled")==="1"){
