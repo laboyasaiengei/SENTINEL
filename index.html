@@ -1168,7 +1168,7 @@ function cardHtml(app){
     </div><div class="chart-wrap"><div class="chart-head"><span class="chart-title">${(selectedRange==="week"||selectedRange==="month")?"Operations / day":(selectedRange==="day24"||selectedRange==="quotaDayPT")?"Operations / hour":"Operations / min"} · ${rangeLabel(selectedRange)}</span><span class="chart-legend"><span class="lr">READ</span><span class="lw">WRITE</span><span class="ld">DELETE</span></span></div><canvas></canvas></div>
     <div class="alerts">${alerts.length?alerts.map(a=>`<div class="alert ${a.type}">${a.text}</div>`).join(""):`<div class="alert">異常検知なし</div>`}</div>
     <div class="meta"><span>Shared v0.4 / 1min</span><span>最終受信 ${last?new Date(last).toLocaleTimeString("ja-JP"):"—"}</span></div>`
-    :`<div class="empty-message">共有Telemetry未受信<br>対象アプリをv0.3へ更新後、自動表示</div>`}
+    :`<div class="empty-message">共有Telemetry未受信<br>アプリを起動後、自動表示</div>`}
   </section>`;
 }
 
