@@ -1432,41 +1432,90 @@ async function disablePushNotifications(){
     await waitForFirebase();
     await initShared();
 
-    let token=localStorage.getItem("sentinelPushToken")||"";
+    // 解除対象になりうるトークンを集める。localStorageに保存済みのものと、今この場で取り直せる
+    // 「現在の生きたトークン」の両方を試す（FCMのトークンは自然にローテーションすることがあり、
+    // 片方だけを信じるとズレて別ドキュメントを見てしまうため）。
+    const tokens=new Set();
+    const stored=localStorage.getItem("sentinelPushToken")||"";
+    if(stored)tokens.add(stored);
 
-    // 旧版でtokenをlocalStorageに保存していない端末でも現在tokenを再取得して解除できるようにする。
-    if(!token && "serviceWorker" in navigator && typeof firebase.messaging==="function"){
-      const reg=await navigator.serviceWorker.getRegistration("./");
-      if(reg){
-        sharedMessaging=sharedApp.messaging();
-        try{
-          token=await sharedMessaging.getToken({
+    if("serviceWorker" in navigator && typeof firebase.messaging==="function"){
+      try{
+        const reg=await navigator.serviceWorker.getRegistration("./");
+        if(reg){
+          sharedMessaging=sharedApp.messaging();
+          const liveToken=await sharedMessaging.getToken({
             vapidKey:FCM_VAPID_PUBLIC_KEY,
             serviceWorkerRegistration:reg
-          })||"";
-        }catch(_){}
+          });
+          if(liveToken)tokens.add(liveToken);
+        }
+      }catch(e){
+        console.warn("現在のFCMトークン取得に失敗（保存済みトークンのみで解除を試みます）:",e);
       }
     }
 
-    if(token){
-      const headers=await sharedHeaders();
-      const docId=await subscriberDocId_(token);
-      const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents/${PUSH_SUBSCRIBER_COLLECTION}/${docId}?updateMask.fieldPaths=enabled&updateMask.fieldPaths=updatedAt`;
-      const body={fields:{
-        enabled:{booleanValue:false},
-        updatedAt:{timestampValue:new Date().toISOString()}
-      }};
-      const res=await fetch(url,{method:"PATCH",headers,body:JSON.stringify(body),cache:"no-store"});
-      const raw=await res.text();
-      if(!res.ok)throw new Error(`Push subscriber disable HTTP ${res.status}: ${raw.slice(0,300)}`);
+    if(tokens.size===0){
+      // Firestore側でどのドキュメントを無効化すべきか特定できない。
+      // ここで諦めて「解除済み」を名乗るのは危険なので、明確に失敗として扱う。
+      throw new Error("解除対象のPush登録情報が見つかりませんでした。ブラウザのサイト設定から、このサイトの通知の許可を直接オフにしてください。");
+    }
 
-      // FCM側の購読も解除。失敗してもFirestore側でenabled=falseなら通知対象外になる。
+    const headers=await sharedHeaders();
+    let disabledCount=0,foundCount=0,lastError=null;
+    for(const token of tokens){
       try{
-        sharedMessaging=sharedMessaging||sharedApp.messaging();
-        await sharedMessaging.deleteToken(token);
+        const docId=await subscriberDocId_(token);
+        const docUrl=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents/${PUSH_SUBSCRIBER_COLLECTION}/${docId}`;
+
+        // 存在しないドキュメントへ一部フィールドだけPATCHすると、Firestoreはそれを「新規作成」として
+        // 扱う。すると送った2フィールド（enabled/updatedAt）だけではルールの必須フィールド
+        // （token/createdAt含む4つ）が揃わず403(Permission Denied)になるため、
+        // 先に存在確認してから更新する。
+        const getRes=await fetch(docUrl,{method:"GET",headers,cache:"no-store"});
+        if(getRes.status===404){
+          continue; // このトークンはそもそも登録されていない
+        }
+        if(!getRes.ok){
+          throw new Error(`Push subscriber get HTTP ${getRes.status}: ${(await getRes.text()).slice(0,300)}`);
+        }
+        foundCount++;
+
+        const url=`${docUrl}?updateMask.fieldPaths=enabled&updateMask.fieldPaths=updatedAt`;
+        const body={fields:{
+          enabled:{booleanValue:false},
+          updatedAt:{timestampValue:new Date().toISOString()}
+        }};
+        const res=await fetch(url,{method:"PATCH",headers,body:JSON.stringify(body),cache:"no-store"});
+        const raw=await res.text();
+        if(!res.ok)throw new Error(`Push subscriber disable HTTP ${res.status}: ${raw.slice(0,300)}`);
+        disabledCount++;
+
+        // FCM側の購読も解除。失敗してもFirestore側でenabled=falseなら通知対象外になる。
+        try{
+          sharedMessaging=sharedMessaging||sharedApp.messaging();
+          await sharedMessaging.deleteToken(token);
+        }catch(e){
+          console.warn("FCM token delete skipped:",e);
+        }
       }catch(e){
-        console.warn("FCM token delete skipped:",e);
+        lastError=e;
+        console.warn("Push subscriber disable failed for one token:",e);
       }
+    }
+
+    if(disabledCount===0){
+      if(foundCount===0 && !lastError){
+        // 試したどのトークンにも対応するドキュメントが存在しなかった。
+        // つまりこの端末はもともと通知対象になっていないので、これは失敗ではなく成功として扱う。
+        localStorage.removeItem("sentinelPushEnabled");
+        localStorage.removeItem("sentinelPushToken");
+        setNotifyUi_("この端末のPush通知は解除済み",false,false);
+        await collectPushDiagnostics_(false);
+        return;
+      }
+      // 実際に存在するドキュメントがあったのに更新できなかった場合だけ、正直に失敗を伝える。
+      throw lastError||new Error("Push登録の解除に失敗しました");
     }
 
     localStorage.removeItem("sentinelPushEnabled");
@@ -1476,7 +1525,7 @@ async function disablePushNotifications(){
   }catch(e){
     console.error("SENTINEL Push disable:",e);
     setNotifyUi_("解除失敗",true,false);
-    alert("Push通知を解除できませんでした。\\n"+(e.message||String(e)));
+    alert("Push通知を解除できませんでした。\n"+(e.message||String(e)));
   }finally{
     if(btn)btn.disabled=false;
   }
