@@ -1037,6 +1037,43 @@ function chartTickStep_(range, ptsLength){
 }
 
 function rangeLabel(r){return ({hour:"1時間",day24:"24時間",week:"1週間",month:"1ヶ月",quotaDayPT:"PT当日"})[r]||r}
+
+// 単調3次エルミート補間(monotone cubic interpolation)で各点の傾きを算出。
+// Catmull-Romのような単純な丸めと違い、実データにない山谷(オーバーシュート)を作らずに
+// 折れ線のトゲトゲ感だけを滑らかにできる。
+function monotoneTangents_(xs,ys){
+  const n=xs.length;
+  if(n<2) return new Array(n).fill(0);
+  const d=new Array(n-1),m=new Array(n);
+  for(let i=0;i<n-1;i++){
+    const dx=xs[i+1]-xs[i];
+    d[i]=dx!==0?(ys[i+1]-ys[i])/dx:0;
+  }
+  m[0]=d[0];m[n-1]=d[n-2];
+  for(let i=1;i<n-1;i++) m[i]=(d[i-1]*d[i]<=0)?0:(d[i-1]+d[i])/2;
+  for(let i=0;i<n-1;i++){
+    if(d[i]===0){m[i]=0;m[i+1]=0;continue}
+    const a=m[i]/d[i],b=m[i+1]/d[i],s=a*a+b*b;
+    if(s>9){const t=3/Math.sqrt(s);m[i]=t*a*d[i];m[i+1]=t*b*d[i];}
+  }
+  return m;
+}
+// xs/ysで与えた点を、上記の傾きを使った3次ベジェで滑らかに結んでctxパスに追加する。
+// 各データ点そのものは通過するので値の正確さは変わらない。
+function drawMonotonePath_(ctx,xs,ys){
+  const n=xs.length;
+  if(n===0) return;
+  ctx.moveTo(xs[0],ys[0]);
+  if(n===1) return;
+  const m=monotoneTangents_(xs,ys);
+  for(let i=0;i<n-1;i++){
+    const dx=(xs[i+1]-xs[i])/3;
+    const cp1x=xs[i]+dx,cp1y=ys[i]+m[i]*dx;
+    const cp2x=xs[i+1]-dx,cp2y=ys[i+1]-m[i+1]*dx;
+    ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,xs[i+1],ys[i+1]);
+  }
+}
+
 function drawChart(canvas,id){
   const ctx=canvas.getContext("2d"),dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
   canvas.width=Math.max(1,Math.floor(w*dpr));canvas.height=Math.max(1,Math.floor(h*dpr));ctx.scale(dpr,dpr);
@@ -1134,24 +1171,22 @@ if(selectedRange==="week"){
     ["deletes",c.getPropertyValue("--chart-delete").trim()]
   ];
 
-  // v1.0: 全レンジを折れ線で統一。
+  // v1.1: 全レンジで単調3次補間による滑らかな線に統一(値そのものは変えない)。
   // 1h=1分、24h/PT当日=1時間、1week=1日。
+  const xs=pts.map((p,i)=>pts.length===1?L+pw/2:L+i/(pts.length-1)*pw);
   series.forEach(([key,color])=>{
-    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.beginPath();
-    pts.forEach((p,i)=>{
-      const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
-      const y=T+ph-(p[key]/ymax)*ph;
-      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
-    });
+    const ys=pts.map(p=>T+ph-(p[key]/ymax)*ph);
+    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;
+    ctx.lineJoin="round";ctx.lineCap="round";
+    ctx.beginPath();
+    drawMonotonePath_(ctx,xs,ys);
     ctx.stroke();
 
     // 全レンジで各点を可視化。1時間表示は点数が多いので少し小さめ。
     const pointRadius=selectedRange==="hour"?1.4:2;
     pts.forEach((p,i)=>{
       if(!p[key])return;
-      const x=pts.length===1?L+pw/2:L+i/(pts.length-1)*pw;
-      const y=T+ph-(p[key]/ymax)*ph;
-      ctx.beginPath();ctx.arc(x,y,pointRadius,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(xs[i],ys[i],pointRadius,0,Math.PI*2);ctx.fill();
     });
   });
 
