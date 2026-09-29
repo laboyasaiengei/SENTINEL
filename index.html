@@ -676,8 +676,8 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 <script>
 const LIMITS={reads:50000,writes:20000,deletes:20000};
 const BURN_LIMITS={
-  "atlas-prod":{minute:{reads:500,writes:50,deletes:50},hour:{reads:2500,writes:250,deletes:250}},
-  "caesar-prod":{minute:{reads:1000,writes:500,deletes:500},hour:{reads:5000,writes:2500,deletes:2500}}
+  "atlas-prod":{minute:{reads:500,writes:50,deletes:50},hour:{reads:1500,writes:150,deletes:150}},
+  "caesar-prod":{minute:{reads:1000,writes:500,deletes:500},hour:{reads:5000,writes:2500,deletes:5000}}
 };
 const APPS=[
   {id:"atlas-prod",name:"ATLAS",group:"prod"},
@@ -1791,7 +1791,20 @@ window.addEventListener("load",()=>{
   },MIN_SPLASH_MS);
 },{once:true});
 
-window.addEventListener("load",()=>{ initPushUi().catch(e=>console.error("Push UI init:",e)); },{once:true});
+// ホーム画面アイコンの通知件数バッジ（未読件数）は firebase-messaging-sw.js 側で加算する。
+// アプリを開いた／前面に戻ったタイミングで件数を0に戻す。
+async function clearSentinelBadge_(){
+  try{ if(navigator.clearAppBadge) await navigator.clearAppBadge(); }catch(_){}
+  try{
+    if("serviceWorker" in navigator){
+      const reg=await navigator.serviceWorker.getRegistration("./");
+      if(reg && reg.active) reg.active.postMessage({type:"clear-badge"});
+    }
+  }catch(_){}
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") clearSentinelBadge_(); });
+window.addEventListener("pageshow",()=>{ clearSentinelBadge_(); });
+window.addEventListener("load",()=>{ initPushUi().catch(e=>console.error("Push UI init:",e)); clearSentinelBadge_(); },{once:true});
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
 </script>
