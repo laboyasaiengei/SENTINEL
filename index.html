@@ -1249,20 +1249,53 @@ if(selectedRange==="week"){
   ];
 
   // 閾値の横線。ymaxの範囲内に収まる(見える)場合だけ描画する。
+  // 複数の指標で閾値が同じ値のときは、線が重なって片方の色しか見えなくなるため、
+  // 同じ高さの線を「色ごとの破線を交互にずらして」描き、ラベルも1つにまとめて色分け表示する。
   const burnInfo=burnLimitsForRange_(id,selectedRange);
   if(burnInfo){
+    const letterOf={reads:"R",writes:"W",deletes:"D"};
+    const groups=new Map();
     series.forEach(([key,color])=>{
       const limVal=burnInfo.limits[key];
       if(limVal==null||limVal>ymax)return;
+      if(!groups.has(limVal))groups.set(limVal,[]);
+      groups.get(limVal).push({key,color});
+    });
+    groups.forEach((items,limVal)=>{
       const ly=T+ph-(limVal/ymax)*ph;
+      const n=items.length;
       ctx.save();
-      ctx.strokeStyle=color;ctx.globalAlpha=.85;ctx.setLineDash([4,3]);ctx.lineWidth=1.3;
-      ctx.beginPath();ctx.moveTo(L,ly);ctx.lineTo(L+pw,ly);ctx.stroke();
-      ctx.setLineDash([]);ctx.globalAlpha=1;
+      ctx.globalAlpha=.85;ctx.lineWidth=1.3;
+      if(n===1){
+        ctx.strokeStyle=items[0].color;ctx.setLineDash([4,3]);
+        ctx.beginPath();ctx.moveTo(L,ly);ctx.lineTo(L+pw,ly);ctx.stroke();
+      }else{
+        const seg=4;
+        items.forEach((it,i)=>{
+          ctx.strokeStyle=it.color;
+          ctx.setLineDash([seg,seg*(n-1)]);
+          ctx.lineDashOffset=-i*seg;
+          ctx.beginPath();ctx.moveTo(L,ly);ctx.lineTo(L+pw,ly);ctx.stroke();
+        });
+      }
+      ctx.setLineDash([]);ctx.lineDashOffset=0;ctx.globalAlpha=1;
       ctx.textAlign="left";ctx.textBaseline="bottom";
-      ctx.fillStyle=color;
       ctx.font=(chartIsMobile_()?"8px sans-serif":"9px sans-serif");
-      ctx.fillText(burnInfo.unit+"上限 "+fmt(limVal),L+4,ly-2);
+      const tail=burnInfo.unit+"上限 "+fmt(limVal);
+      if(n===1){
+        ctx.fillStyle=items[0].color;
+        ctx.fillText(tail,L+4,ly-2);
+      }else{
+        let tx=L+4;
+        items.forEach((it,i)=>{
+          const t=letterOf[it.key]+(i<n-1?"/":" ");
+          ctx.fillStyle=it.color;
+          ctx.fillText(t,tx,ly-2);
+          tx+=ctx.measureText(t).width;
+        });
+        ctx.fillStyle="#b8c7cf";
+        ctx.fillText(tail,tx,ly-2);
+      }
       ctx.restore();
     });
   }
