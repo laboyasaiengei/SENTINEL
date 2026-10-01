@@ -1250,10 +1250,10 @@ if(selectedRange==="week"){
 
   // 閾値の横線。ymaxの範囲内に収まる(見える)場合だけ描画する。
   // 複数の指標で閾値が同じ値のときは、線が重なって片方の色しか見えなくなるため、
-  // 同じ高さの線を「色ごとの破線を交互にずらして」描き、ラベルも1つにまとめて色分け表示する。
+  // 同じ高さの線を「色ごとの破線を交互にずらして」描く。
+  // 閾値の数値はグラフ内には描かず、上のREADS/WRITES/DELETESの各ボックスに表示する。
   const burnInfo=burnLimitsForRange_(id,selectedRange);
   if(burnInfo){
-    const letterOf={reads:"R",writes:"W",deletes:"D"};
     const groups=new Map();
     series.forEach(([key,color])=>{
       const limVal=burnInfo.limits[key];
@@ -1279,27 +1279,6 @@ if(selectedRange==="week"){
         });
       }
       ctx.setLineDash([]);ctx.lineDashOffset=0;ctx.globalAlpha=1;
-      ctx.textAlign="left";
-      ctx.font=(chartIsMobile_()?"8px sans-serif":"9px sans-serif");
-      // 閾値がグラフの最上部にあるとき、線の上に文字を置くと上端で見切れるため、線の下側に表示する。
-      const labelBelow=ly<T+12;
-      ctx.textBaseline=labelBelow?"top":"bottom";
-      const labelY=labelBelow?ly+3:ly-2;
-      const tail=burnInfo.unit+"上限 "+fmt(limVal);
-      if(n===1){
-        ctx.fillStyle=items[0].color;
-        ctx.fillText(tail,L+4,labelY);
-      }else{
-        let tx=L+4;
-        items.forEach((it,i)=>{
-          const t=letterOf[it.key]+(i<n-1?"/":" ");
-          ctx.fillStyle=it.color;
-          ctx.fillText(t,tx,labelY);
-          tx+=ctx.measureText(t).width;
-        });
-        ctx.fillStyle="#b8c7cf";
-        ctx.fillText(tail,tx,labelY);
-      }
       ctx.restore();
     });
   }
