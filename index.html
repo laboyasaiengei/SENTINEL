@@ -1082,27 +1082,27 @@ function burnAlerts(appId){
   const cfg=BURN_LIMITS[appId];
   if(!cfg)return[];
   const out=[];
-
-  const lastMinute=seriesForApp(appId,"hour").slice(-1)[0];
-  if(lastMinute){
-    Object.keys(cfg.minute).forEach(metric=>{
-      const val=lastMinute[metric]||0,lim=cfg.minute[metric];
-      if(lim&&val>=lim){
-        out.push({type:"danger",text:`${metric.toUpperCase()} が急増中（直近1分 ${fmt(val)} / 目安${fmt(lim)}）`});
-      }
+  const MAX_PER_KIND=5;
+  // グラフ上にその挙動が残っている間は、超過した時刻・値・上限を履歴として表示し続ける。
+  // 1分上限: 1時間グラフ(直近60分)の各分を判定 / 1時間上限: 24時間グラフの各時間枠を判定。
+  const hm=ts=>new Date(ts).toLocaleTimeString("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+  const dh=ts=>new Date(ts).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",hourCycle:"h23"})+"〜";
+  const scan=(pts,limits,label,fmtTs)=>{
+    const hits=[];
+    pts.forEach((p,i)=>{
+      Object.keys(limits).forEach(metric=>{
+        const val=p[metric]||0,lim=limits[metric];
+        if(lim&&val>=lim)hits.push({ts:p.ts,metric,val,lim,live:i===pts.length-1});
+      });
     });
-  }
-
-  const lastHour=seriesForApp(appId,"day24").slice(-1)[0];
-  if(lastHour){
-    Object.keys(cfg.hour).forEach(metric=>{
-      const val=lastHour[metric]||0,lim=cfg.hour[metric];
-      if(lim&&val>=lim){
-        out.push({type:"danger",text:`${metric.toUpperCase()} が急増中（直近1時間 ${fmt(val)} / 目安${fmt(lim)}）`});
-      }
+    hits.sort((a,b)=>b.ts-a.ts);
+    hits.slice(0,MAX_PER_KIND).forEach(h=>{
+      out.push({type:"danger",text:`${h.metric.toUpperCase()} が${label}上限を超過 — ${fmtTs(h.ts)} / ${fmt(h.val)}（上限 ${fmt(h.lim)}）${h.live?" ・進行中":""}`});
     });
-  }
-
+    if(hits.length>MAX_PER_KIND)out.push({type:"danger",text:`${label}上限の超過 ほか ${hits.length-MAX_PER_KIND} 件`});
+  };
+  scan(seriesForApp(appId,"hour"),cfg.minute,"1分",hm);
+  scan(seriesForApp(appId,"day24"),cfg.hour,"1時間",dh);
   return out;
 }
 
