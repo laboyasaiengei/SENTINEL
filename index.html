@@ -606,6 +606,33 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   }
 }
 
+/* v11 layout: view switcher moved above range selector, larger logo, compact PT/connection at right */
+.view-seg{display:grid;grid-template-columns:1fr 1fr;min-width:300px;max-width:420px;margin-bottom:8px}
+.view-seg button{min-height:34px;font-size:11px;white-space:nowrap}
+@media(max-width:640px){
+  .header-inner{padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 8px!important}
+  .brand-row{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important}
+  .brand-logo-wrap{flex:1 1 auto!important;width:auto!important;min-width:0!important;padding-top:0!important;margin:0!important;justify-content:flex-start!important}
+  .brand-logo{width:100%!important;max-width:320px!important;max-height:none!important;height:auto!important;object-fit:contain!important;object-position:left center!important}
+  .header-right{
+    flex:0 0 auto!important;width:auto!important;margin:0!important;
+    display:grid!important;
+    grid-template-columns:auto 30px!important;
+    grid-template-rows:auto auto!important;
+    grid-template-areas:"pt notify" "shared notify"!important;
+    gap:3px 6px!important;justify-items:end!important;align-items:center!important
+  }
+  #ptDate,#liveBadge{
+    width:auto!important;max-width:none!important;height:19px!important;
+    display:flex!important;align-items:center!important;justify-content:center!important;
+    padding:0 6px!important;border-radius:6px!important;font-size:9px!important;line-height:1!important;
+    white-space:nowrap!important;justify-self:end!important
+  }
+  .notification-control{grid-area:notify!important;width:30px!important}
+  .view-seg{width:100%!important;min-width:0!important;max-width:none!important;display:grid!important;grid-template-columns:1fr 1fr!important;overflow:visible!important;padding:3px!important;margin-bottom:8px!important}
+  .view-seg button{min-height:34px!important;padding:6px 4px!important;font-size:10.5px!important}
+}
+
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -630,13 +657,16 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
         <span id="ptDate" class="pill">PT —</span>
         <span id="liveBadge" class="pill ok">接続待ち</span>
         <div class="notification-control"><button id="notifyBtn" class="notify-btn" type="button" aria-label="通知を有効化" title="通知を有効化">🔔</button><span id="notifyState" class="notify-state">未設定</span></div>
-        <div class="diag-nav"><button id="navMonitor" class="active">アクティビティモニター</button><button id="navDiagnostics">エラーリスト</button></div>
       </div>
     </div>
   </div>
 </header>
 
 <main>
+  <div class="segment view-seg" id="viewSeg">
+    <button id="navMonitor" class="active" type="button">アクティビティモニター</button>
+    <button id="navDiagnostics" type="button">エラーリスト</button>
+  </div>
   <div id="monitorView" class="diag-panel active">
   <div class="toolbar">
     <div class="segment rangeSeg" id="rangeSeg">
