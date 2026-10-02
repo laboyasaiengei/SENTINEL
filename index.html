@@ -676,8 +676,8 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 <script>
 const LIMITS={reads:50000,writes:20000,deletes:20000};
 const BURN_LIMITS={
-  "atlas-prod":{minute:{reads:500,writes:50,deletes:50},hour:{reads:1500,writes:150,deletes:150}},
-  "caesar-prod":{minute:{reads:1000,writes:500,deletes:500},hour:{reads:5000,writes:2500,deletes:5000}}
+  "atlas-prod":{minute:{reads:250,writes:50,deletes:50},hour:{reads:500,writes:100,deletes:100}},
+  "caesar-prod":{minute:{reads:1000,writes:1000,deletes:1000},hour:{reads:2000,writes:2000,deletes:2000}}
 };
 const APPS=[
   {id:"atlas-prod",name:"ATLAS",group:"prod"},
