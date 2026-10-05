@@ -11,13 +11,18 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
+
+/* ---------- 通知の表示 ----------
+   GAS側はdata形式（title / body / url）で送る。
+   表示はここで1回だけ行う（notification形式にすると二重表示になる）。 */
 messaging.onBackgroundMessage((payload) => {
   const d = payload.data || {};
-  return self.registration.showNotification('\u3000', {
-    body: (d.title || '') + (d.body ? '\n' + d.body : ''),
-    data: { url: d.url || './' }
+  return self.registration.showNotification(d.title || "SENTINEL", {
+    body: d.body || "",
+    data: { url: d.url || "./" }
   });
 });
+
 /* ---------- アイコンバッジ（未読件数） ---------- */
 const BADGE_DB = "sentinel-badge", BADGE_STORE = "kv", BADGE_KEY = "count";
 
