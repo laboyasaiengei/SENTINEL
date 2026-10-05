@@ -13,8 +13,8 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const d = payload.data || {};
-  return self.registration.showNotification(d.title || 'SENTINEL', {
-    body: d.body || '',
+  return self.registration.showNotification('\u3000', {
+    body: (d.title || '') + (d.body ? '\n' + d.body : ''),
     data: { url: d.url || './' }
   });
 });
