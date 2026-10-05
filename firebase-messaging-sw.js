@@ -11,7 +11,13 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
-
+messaging.onBackgroundMessage((payload) => {
+  const d = payload.data || {};
+  return self.registration.showNotification(d.title || 'SENTINEL', {
+    body: d.body || '',
+    data: { url: d.url || './' }
+  });
+});
 /* ---------- アイコンバッジ（未読件数） ---------- */
 const BADGE_DB = "sentinel-badge", BADGE_STORE = "kv", BADGE_KEY = "count";
 
