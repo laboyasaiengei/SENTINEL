@@ -632,7 +632,18 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   .view-seg{width:100%!important;min-width:0!important;max-width:none!important;display:grid!important;grid-template-columns:1fr 1fr!important;overflow:visible!important;padding:3px!important;margin-bottom:8px!important}
   .view-seg button{min-height:34px!important;padding:6px 4px!important;font-size:10.5px!important}
 }
-
+  
+/* ===== ログイン画面 ===== */
+#loginOverlay{position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;padding:24px;background:var(--bg)}
+#loginOverlay.show{display:flex}
+#loginOverlay .login-box{width:100%;max-width:340px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 18px}
+#loginOverlay h2{margin:0 0 4px;font-size:16px}
+#loginOverlay p{margin:0 0 14px;font-size:11px;color:var(--muted)}
+#loginOverlay input{width:100%;box-sizing:border-box;margin-bottom:10px;padding:11px 12px;border-radius:9px;border:1px solid var(--line);background:#10191f;color:var(--ink);font-size:16px}
+#loginOverlay button{width:100%;padding:11px;border:0;border-radius:9px;background:var(--accent);color:#06141c;font-weight:800;font-size:14px}
+#loginOverlay button:disabled{opacity:.5}
+#loginMsg{min-height:16px;margin:2px 0 10px;font-size:11px;color:#d86d6d}
+.logout-btn{border:1px solid var(--line);background:transparent;color:var(--muted);padding:7px 12px;border-radius:8px;font-size:11px;cursor:pointer}
 </style>
 
 <script defer crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -649,6 +660,16 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 </head>
 <body class="sentinel-booting">
 <div id="sentinelSplash" aria-hidden="true"><img src="icons/logo.png" alt=""></div>
+<div id="loginOverlay">
+  <form id="loginForm" class="login-box" autocomplete="on">
+    <h2>SENTINEL ログイン</h2>
+    <p>管理者アカウントでログインしてください</p>
+    <input id="loginEmail" type="email" name="username" autocomplete="username" placeholder="メールアドレス" required>
+    <input id="loginPassword" type="password" name="password" autocomplete="current-password" placeholder="パスワード" required>
+    <div id="loginMsg"></div>
+    <button id="loginBtn" type="submit">ログイン</button>
+  </form>
+</div>
 <header>
   <div class="header-inner">
     <div class="brand-row">
@@ -700,6 +721,7 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 
 <footer>
   SENTINELはATLAS / CAESAR各系統の共有Telemetryとエラーログを監視します。表示期間は1時間・24時間・1週間・1ヶ月・PT当日。PT当日では無料枠に対する使用率を表示します。
+  <div style="margin-top:10px"><button id="logoutBtn" type="button" class="logout-btn">ログアウト</button></div>
 </footer>
 
 
@@ -763,22 +785,83 @@ async function waitForFirebase(timeoutMs=12000){
     await new Promise(r=>setTimeout(r,50));
   }
 }
-async function initShared(){
-  if(sharedApp)return;
-  await waitForFirebase();
-  sharedApp=firebase.initializeApp(SHARED_CONFIG,"sentinel-dashboard-shared");
-  sharedAuth=sharedApp.auth();
-  sharedAppCheck=sharedApp.appCheck();
-  sharedAppCheck.activate(new firebase.appCheck.ReCaptchaEnterpriseProvider(SHARED_SITE_KEY),true);
-  if(!sharedAuth.currentUser)await sharedAuth.signInAnonymously();
+let sharedInitPromise=null;
+function initShared(){
+  if(!sharedInitPromise){
+    sharedInitPromise=(async()=>{
+      await waitForFirebase();
+      sharedApp=firebase.initializeApp(SHARED_CONFIG,"sentinel-dashboard-shared");
+      sharedAuth=sharedApp.auth();
+      sharedAppCheck=sharedApp.appCheck();
+      sharedAppCheck.activate(new firebase.appCheck.ReCaptchaEnterpriseProvider(SHARED_SITE_KEY),true);
+      // 保存済みのログイン状態の復元を待つ（待たないと、ログイン済みでも未ログインと誤判定する）
+      await new Promise(resolve=>{
+        const unsub=sharedAuth.onAuthStateChanged(()=>{unsub();resolve();});
+      });
+    })().catch(e=>{sharedInitPromise=null;throw e;});
+  }
+  return sharedInitPromise;
 }
 async function sharedHeaders(){
   await initShared();
-  const user=sharedAuth.currentUser|| (await sharedAuth.signInAnonymously()).user;
+  const user=sharedAuth.currentUser;
+  // 匿名セッションは管理者ではないので、未ログイン扱いにする
+  if(!user||user.isAnonymous){
+    showLoginOverlay_("");
+    throw new Error("LOGIN_REQUIRED");
+  }
   const id=await user.getIdToken();
   const h={"Authorization":"Bearer "+id,"Content-Type":"application/json"};
   try{const a=await sharedAppCheck.getToken(false);if(a&&a.token)h["X-Firebase-AppCheck"]=a.token;}catch(_){}
   return h;
+}
+function showLoginOverlay_(msg){
+  const ov=document.getElementById("loginOverlay");
+  if(!ov)return;
+  ov.classList.add("show");
+  const m=document.getElementById("loginMsg");
+  if(m&&msg)m.textContent=msg;
+}
+function hideLoginOverlay_(){
+  const ov=document.getElementById("loginOverlay");
+  if(ov)ov.classList.remove("show");
+  const p=document.getElementById("loginPassword");
+  if(p)p.value="";
+  const m=document.getElementById("loginMsg");
+  if(m)m.textContent="";
+}
+function loginErrorText_(e){
+  const c=(e&&e.code)||"";
+  if(c==="auth/invalid-credential"||c==="auth/wrong-password"||c==="auth/user-not-found"||c==="auth/invalid-email")return "メールアドレスまたはパスワードが違います";
+  if(c==="auth/too-many-requests")return "試行回数が多すぎます。しばらく待ってからやり直してください";
+  if(c==="auth/network-request-failed")return "ネットワークに接続できません";
+  if(c==="auth/operation-not-allowed")return "Firebaseでメール/パスワードのログインが有効になっていません";
+  return "ログインに失敗しました ("+(c||"unknown")+")";
+}
+async function doLogin_(){
+  const email=(document.getElementById("loginEmail").value||"").trim();
+  const pw=document.getElementById("loginPassword").value||"";
+  const btn=document.getElementById("loginBtn");
+  if(!email||!pw)return;
+  btn.disabled=true;
+  try{
+    await initShared();
+    await sharedAuth.signInWithEmailAndPassword(email,pw);
+    hideLoginOverlay_();
+    lastRemoteError="";
+    refresh();
+    refreshDiagnostics();
+  }catch(e){
+    showLoginOverlay_(loginErrorText_(e));
+  }finally{
+    btn.disabled=false;
+  }
+}
+async function doLogout_(){
+  try{await initShared();await sharedAuth.signOut();}catch(_){}
+  remoteDocs=[];diagnosticRows=[];diagnosticError="";lastRemoteError="LOGIN_REQUIRED";
+  render();renderDiagnostics();
+  showLoginOverlay_("");
 }
 function decodeVal(v){
   if(!v)return null;
@@ -1851,6 +1934,8 @@ async function clearSentinelBadge_(){
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") clearSentinelBadge_(); });
 window.addEventListener("pageshow",()=>{ clearSentinelBadge_(); });
 window.addEventListener("load",()=>{ initPushUi().catch(e=>console.error("Push UI init:",e)); clearSentinelBadge_(); },{once:true});
+document.getElementById("loginForm").addEventListener("submit",e=>{e.preventDefault();doLogin_();});
+document.getElementById("logoutBtn").addEventListener("click",doLogout_);
 refresh();
 setInterval(refresh,AUTO_REFRESH_MS);
 </script>
