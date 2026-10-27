@@ -688,6 +688,7 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   <div class="segment view-seg" id="viewSeg">
     <button id="navMonitor" class="active" type="button">アクティビティモニター</button>
     <button id="navDiagnostics" type="button">エラーリスト</button>
+    <button id="navAudit" type="button">ログイン履歴</button>
   </div>
   <div id="monitorView" class="diag-panel active">
   <div class="toolbar">
@@ -717,6 +718,10 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
   <div id="diagnosticsView" class="diag-panel">
     <div class="toolbar"><div><div class="section-title" style="margin:0">エラーログ</div><div class="sub">各アプリが自動送信した技術診断情報をアプリ別に表示します。入力内容・氏名・薬品名は収集しません。</div></div><button class="ghost" id="diagRefreshBtn">↻ 再読込</button></div>
       <div class="diag-table-wrap"><div id="diagList" class="diag-empty">取得前</div></div>
+  </div>
+    <div id="auditView" class="diag-panel">
+    <div class="toolbar"><div><div class="section-title" style="margin:0">ログイン履歴</div><div class="sub">各アプリの管理者ログインの成功・失敗を、新しい順に表示します（最新100件）。パスワードは記録しません。</div></div><button class="ghost" id="auditRefreshBtn">↻ 再読込</button></div>
+      <div class="diag-table-wrap"><div id="auditList" class="diag-empty">取得前</div></div>
   </div>
 </main>
 
@@ -849,12 +854,39 @@ const LOGIN_FAIL_KEY="sentinelLoginFail.v1";
 const LOGIN_FAIL_LIMIT=3;
 const LOGIN_FAIL_WINDOW_MS=15*60*1000;
 const LOGIN_REPORT_COOLDOWN_MS=10*60*1000;
+const AUDIT_COLLECTION="sentinelAuditLog";
+const AUDIT_LIMIT=100;
+
+function auditDevice_(){let d="";try{d=localStorage.getItem("sentinelAuditDevice.v1")||"";if(!d){d=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8);localStorage.setItem("sentinelAuditDevice.v1",d)}}catch(_){}return String(d||"unknown").slice(0,16)}
+function auditUa_(){const u=navigator.userAgent||"";const os=/iPhone/.test(u)?"iPhone":/iPad/.test(u)?"iPad":/Android/.test(u)?"Android":/Macintosh/.test(u)?(navigator.maxTouchPoints>1?"iPad":"Mac"):/Windows/.test(u)?"Windows":/Linux/.test(u)?"Linux":"?";const br=/Edg\//.test(u)?"Edge":/OPR\//.test(u)?"Opera":/Firefox\//.test(u)?"Firefox":/Chrome\//.test(u)?"Chrome":/Safari\//.test(u)?"Safari":"?";return os+" / "+br}
+
+async function auditRecord_(ev){
+  try{
+    await initShared();
+    // 失敗直後はログインしていないので、記録を書くために匿名セッションを使う
+    // (匿名セッションは管理者ではないので、画面上は未ログイン扱いのまま)
+    if(!sharedAuth.currentUser)await sharedAuth.signInAnonymously();
+    const user=sharedAuth.currentUser;
+    if(!user)return;
+    const id=await user.getIdToken();
+    const h={"Authorization":"Bearer "+id,"Content-Type":"application/json"};
+    try{const a=await sharedAppCheck.getToken(false);if(a&&a.token)h["X-Firebase-AppCheck"]=a.token}catch(_){}
+    const rid="sentinel_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8);
+    const f={appId:{stringValue:"sentinel"},event:{stringValue:ev.event},account:{stringValue:String(ev.account||"").slice(0,100)},device:{stringValue:auditDevice_()},ua:{stringValue:auditUa_()}};
+    if(ev.uid)f.uid={stringValue:String(ev.uid).slice(0,40)};
+    if(ev.detail)f.detail={stringValue:String(ev.detail).slice(0,80)};
+    const name=`projects/${SHARED_CONFIG.projectId}/databases/(default)/documents/${AUDIT_COLLECTION}/${rid}`;
+    await fetch(`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents:commit`,{
+      method:"POST",headers:h,
+      body:JSON.stringify({writes:[{update:{name,fields:f},updateTransforms:[{fieldPath:"recordedAt",setToServerValue:"REQUEST_TIME"}],currentDocument:{exists:false}}]}),
+      cache:"no-store"
+    });
+  }catch(_){}
+}
 
 async function reportLoginFailure_(count,code){
   try{
     await initShared();
-    // 失敗直後はログインしていないので、診断ログを書くために匿名セッションを使う
-    // (匿名セッションは管理者ではないので、画面上は未ログイン扱いのまま)
     if(!sharedAuth.currentUser)await sharedAuth.signInAnonymously();
     const user=sharedAuth.currentUser;
     if(!user)return;
@@ -887,6 +919,7 @@ function loginNoteFailure_(code){
   if(due)st.rep=now;
   try{localStorage.setItem(LOGIN_FAIL_KEY,JSON.stringify(st))}catch(_){}
   if(due)reportLoginFailure_(st.n,code);
+  return st.n;
 }
 function loginClearFailures_(){
   try{
@@ -903,16 +936,20 @@ async function doLogin_(){
   btn.disabled=true;
   try{
     await initShared();
-    await sharedAuth.signInWithEmailAndPassword(email,pw);
+    const cred=await sharedAuth.signInWithEmailAndPassword(email,pw);
     loginClearFailures_();
+    auditRecord_({event:"login-ok",account:(cred.user&&cred.user.email)||email,uid:cred.user&&cred.user.uid});
     hideLoginOverlay_();
     lastRemoteError="";
     refresh();
     refreshDiagnostics();
   }catch(e){
     const code=(e&&e.code)||"unknown";
-    // 回線の問題は、パスワードの失敗として数えない
-    if(code!=="auth/network-request-failed")loginNoteFailure_(code);
+    // 回線の問題は、パスワードの失敗として数えない・記録しない
+    if(code!=="auth/network-request-failed"){
+      const n=loginNoteFailure_(code);
+      auditRecord_({event:"login-fail",account:email,detail:"fails="+n+" "+code});
+    }
     showLoginOverlay_(loginErrorText_(e));
   }finally{
     btn.disabled=false;
@@ -1666,8 +1703,50 @@ function renderDiagnostics(){
   }));
 }
 async function refreshDiagnostics(){const b=document.getElementById("diagRefreshBtn");if(b){b.disabled=true;b.textContent="↻ 取得中"}try{await fetchDiagnostics()}catch(e){diagnosticError=e.message||String(e)}renderDiagnostics();if(b){b.disabled=false;b.textContent="↻ 再読込"}}
-function setSentinelView(which){const monitor=which==="monitor";document.getElementById("monitorView").classList.toggle("active",monitor);document.getElementById("diagnosticsView").classList.toggle("active",!monitor);document.getElementById("navMonitor").classList.toggle("active",monitor);document.getElementById("navDiagnostics").classList.toggle("active",!monitor);if(!monitor)refreshDiagnostics()}
-
+let auditRows=[],auditError="";
+async function fetchAudit(){
+  const headers=await sharedHeaders();
+  const url=`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents:runQuery`;
+  const body={structuredQuery:{from:[{collectionId:AUDIT_COLLECTION}],orderBy:[{field:{fieldPath:"recordedAt"},direction:"DESCENDING"}],limit:AUDIT_LIMIT}};
+  const res=await fetch(url,{method:"POST",headers,body:JSON.stringify(body),cache:"no-store"});
+  const raw=await res.text();
+  if(!res.ok)throw new Error(`Audit read HTTP ${res.status}: ${raw.slice(0,200)}`);
+  const rows=raw?JSON.parse(raw):[];
+  auditRows=(Array.isArray(rows)?rows:[]).filter(x=>x&&x.document).map(x=>decodeDiagDoc(x.document));
+  auditError="";
+  try{await recordSentinelSharedActivity(Math.max(1,auditRows.length))}catch(e){console.error("SENTINEL audit telemetry:",e)}
+  return auditRows;
+}
+function auditAppName_(id){const a=APPS.find(x=>x.id===id);return a?a.name:(id==="sentinel"?"SENTINEL":String(id||"?"))}
+function renderAudit(){
+  const list=document.getElementById("auditList");if(!list)return;
+  if(auditError){list.className="diag-empty";list.textContent=auditError;return}
+  if(!auditRows.length){list.className="diag-empty";list.textContent="記録なし";return}
+  list.className="";
+  list.innerHTML=`<table class="diag-table"><thead><tr><th>日時</th><th>アプリ</th><th>結果</th><th>アカウント</th><th>端末</th><th>詳細</th></tr></thead><tbody>${auditRows.map(r=>{
+    const ok=r.event==="login-ok";
+    const when=r.recordedAt?new Date(r.recordedAt).toLocaleString("ja-JP"):"—";
+    const detail=r.detail||(r.uid?"UID "+String(r.uid).slice(0,8)+"…":"—");
+    return `<tr><td>${esc(when)}</td><td>${esc(auditAppName_(r.appId))}</td><td><span class="diag-badge ${ok?"test":"sec"}">${ok?"ログイン成功":"ログイン失敗"}</span></td><td>${esc(r.account||"—")}</td><td>${esc(r.ua||"—")}<br><span style="color:var(--muted);font-size:11px">${esc(r.device||"")}</span></td><td>${esc(detail)}</td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+async function refreshAudit(){
+  const b=document.getElementById("auditRefreshBtn");
+  if(b){b.disabled=true;b.textContent="↻ 取得中"}
+  try{await fetchAudit()}catch(e){auditError=e.message||String(e)}
+  renderAudit();
+  if(b){b.disabled=false;b.textContent="↻ 再読込"}
+}
+function setSentinelView(which){
+  const views={monitor:"monitorView",diagnostics:"diagnosticsView",audit:"auditView"};
+  const navs={monitor:"navMonitor",diagnostics:"navDiagnostics",audit:"navAudit"};
+  Object.keys(views).forEach(k=>{
+    document.getElementById(views[k]).classList.toggle("active",k===which);
+    document.getElementById(navs[k]).classList.toggle("active",k===which);
+  });
+  if(which==="diagnostics")refreshDiagnostics();
+  if(which==="audit")refreshAudit();
+}
 
 function pushSupported(){
   return "serviceWorker" in navigator &&
@@ -1969,7 +2048,9 @@ window.addEventListener("resize",()=>setTimeout(render,60));
 document.getElementById("navMonitor").addEventListener("click",()=>setSentinelView("monitor"));
 document.getElementById("navDiagnostics").addEventListener("click",()=>setSentinelView("diagnostics"));
 document.getElementById("diagRefreshBtn").addEventListener("click",refreshDiagnostics);
-
+document.getElementById("navAudit").addEventListener("click",()=>setSentinelView("audit"));
+document.getElementById("auditRefreshBtn").addEventListener("click",refreshAudit);
+  
 // Keep the intentional white splash briefly visible, then fade to the dark dashboard.
 // This does not try to suppress iOS' native white launch frame; it visually connects to it.
 window.addEventListener("load",()=>{
