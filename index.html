@@ -115,6 +115,7 @@ body > header,body > main,body > footer{transition:opacity .55s ease .34s}
 
 .diag-nav{display:flex;gap:7px;margin-top:10px}.diag-nav button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:7px 11px;border-radius:8px;font-size:11px;cursor:pointer}.diag-nav button.active{background:#20313b;color:#fff;border-color:#416679}
 .diag-panel{display:none}.diag-panel.active{display:block}.diag-table-wrap{overflow:auto;background:#10181e;border:1px solid var(--line);border-radius:12px}.diag-table{width:100%;border-collapse:collapse;min-width:820px;font-size:11px}.diag-table th,.diag-table td{padding:9px 10px;border-bottom:1px solid #22313a;text-align:left;vertical-align:top}.diag-table th{color:#91a2ad;font-size:9.5px;letter-spacing:.04em}.diag-badge{display:inline-block;padding:3px 6px;border-radius:999px;border:1px solid var(--line)}.diag-badge.err{color:#f0aaaa;border-color:#6c3939;background:#271515}.diag-badge.test{color:#9bd7b4;border-color:#2f6547;background:#102219}.diag-empty{padding:30px;text-align:center;color:var(--muted)}.diag-app-section{margin-top:14px}.diag-app-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 7px;padding:0 2px}.diag-app-title{font-size:13px;font-weight:800;color:#c9d7de}.diag-app-count{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 7px}.diag-app-empty{padding:18px;text-align:center;color:var(--muted);font-size:11px}
+.diag-badge.sec{color:#ffd28a;border-color:#7a5a1f;background:#2a2010}
 .diag-table th:nth-child(6),.diag-table td:nth-child(6){width:72px;padding-right:4px;white-space:nowrap}.diag-table th:nth-child(7),.diag-table td:nth-child(7){padding-left:4px}.diag-table th:nth-child(8),.diag-table td:nth-child(8){width:92px;text-align:center;white-space:nowrap}.diag-row-unconfirmed{background:#251516}.diag-row-unconfirmed:hover{background:#2d1819}.diag-row-confirmed{background:#112219}.diag-row-confirmed:hover{background:#14291e}.diag-confirm{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;font-weight:700}.diag-confirm input{accent-color:var(--ok);width:15px;height:15px;cursor:pointer}.diag-confirm .state-unconfirmed{color:#ef9a9a}.diag-confirm .state-confirmed{color:#9bd7b4}.diag-pages{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:14px 0 2px}.diag-pages button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer}.diag-pages button.active{background:#20313b;color:#fff;border-color:#416679}.diag-pages button:disabled{opacity:.45;cursor:default}.diag-actions{display:flex;align-items:center;justify-content:center;gap:6px}.diag-delete{border:1px solid #7a3d3d;background:#291617;color:#f0aaaa;padding:5px 8px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer}.diag-delete:hover{background:#351a1c}.diag-delete:disabled{opacity:.5;cursor:default}.diag-app-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 10px}.diag-app-tabs button{border:1px solid var(--line);background:#111a20;color:var(--muted);padding:7px 11px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer}.diag-app-tabs button.active{background:#20313b;color:#fff;border-color:#416679}.diag-app-tabs .count{margin-left:5px;font-size:9px;opacity:.8}
 
 .notification-control{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -844,6 +845,56 @@ function loginErrorText_(e){
   if(c==="auth/operation-not-allowed")return "Firebaseでメール/パスワードのログインが有効になっていません";
   return "ログインに失敗しました ("+(c||"unknown")+")";
 }
+const LOGIN_FAIL_KEY="sentinelLoginFail.v1";
+const LOGIN_FAIL_LIMIT=3;
+const LOGIN_FAIL_WINDOW_MS=15*60*1000;
+const LOGIN_REPORT_COOLDOWN_MS=10*60*1000;
+
+async function reportLoginFailure_(count,code){
+  try{
+    await initShared();
+    // 失敗直後はログインしていないので、診断ログを書くために匿名セッションを使う
+    // (匿名セッションは管理者ではないので、画面上は未ログイン扱いのまま)
+    if(!sharedAuth.currentUser)await sharedAuth.signInAnonymously();
+    const user=sharedAuth.currentUser;
+    if(!user)return;
+    const id=await user.getIdToken();
+    const h={"Authorization":"Bearer "+id,"Content-Type":"application/json"};
+    try{const a=await sharedAppCheck.getToken(false);if(a&&a.token)h["X-Firebase-AppCheck"]=a.token;}catch(_){}
+    const rid="caesar-dev_login_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8);
+    const detail=("fails="+count+" "+String(code||"unknown").replace(/[^A-Za-z0-9_\/-]/g,"")).slice(0,60);
+    const fields={
+      appId:{stringValue:"caesar-dev"},
+      occurredAt:{timestampValue:new Date().toISOString()},
+      appVersion:{stringValue:"sentinel"},
+      online:{booleanValue:navigator.onLine!==false},
+      category:{stringValue:"admin-login-failed"},
+      location:{stringValue:"SENTINEL Login"},
+      detail:{stringValue:detail}
+    };
+    await fetch(`https://firestore.googleapis.com/v1/projects/${SHARED_CONFIG.projectId}/databases/(default)/documents/${DIAG_COLLECTION}?documentId=${encodeURIComponent(rid)}`,{
+      method:"POST",headers:h,body:JSON.stringify({fields}),cache:"no-store"
+    });
+  }catch(_){}
+}
+function loginNoteFailure_(code){
+  let st={n:0,firstAt:0,rep:0};
+  try{st=Object.assign(st,JSON.parse(localStorage.getItem(LOGIN_FAIL_KEY)||"")||{})}catch(_){}
+  const now=Date.now();
+  if(!st.firstAt||now-st.firstAt>LOGIN_FAIL_WINDOW_MS)st={n:0,firstAt:now,rep:st.rep||0};
+  st.n++;
+  const due=(st.n>=LOGIN_FAIL_LIMIT||code==="auth/too-many-requests")&&now-(st.rep||0)>LOGIN_REPORT_COOLDOWN_MS;
+  if(due)st.rep=now;
+  try{localStorage.setItem(LOGIN_FAIL_KEY,JSON.stringify(st))}catch(_){}
+  if(due)reportLoginFailure_(st.n,code);
+}
+function loginClearFailures_(){
+  try{
+    const st=JSON.parse(localStorage.getItem(LOGIN_FAIL_KEY)||"")||{};
+    localStorage.setItem(LOGIN_FAIL_KEY,JSON.stringify({n:0,firstAt:0,rep:st.rep||0}));
+  }catch(_){}
+}
+
 async function doLogin_(){
   const email=(document.getElementById("loginEmail").value||"").trim();
   const pw=document.getElementById("loginPassword").value||"";
@@ -853,11 +904,15 @@ async function doLogin_(){
   try{
     await initShared();
     await sharedAuth.signInWithEmailAndPassword(email,pw);
+    loginClearFailures_();
     hideLoginOverlay_();
     lastRemoteError="";
     refresh();
     refreshDiagnostics();
   }catch(e){
+    const code=(e&&e.code)||"unknown";
+    // 回線の問題は、パスワードの失敗として数えない
+    if(code!=="auth/network-request-failed")loginNoteFailure_(code);
     showLoginOverlay_(loginErrorText_(e));
   }finally{
     btn.disabled=false;
@@ -1579,7 +1634,8 @@ function renderDiagnostics(){
 
     const table=pageRows.length?`<table class="diag-table"><thead><tr><th>発生時刻</th><th>分類</th><th>場所</th><th>HTTP</th><th>通信</th><th>Version</th><th>詳細</th><th>確認 / 削除</th></tr></thead><tbody>${pageRows.map(r=>{
       const idx=diagnosticRows.indexOf(r),confirmed=r.checked===true;
-      const main=`<tr class="${confirmed?"diag-row-confirmed":"diag-row-unconfirmed"}"><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td><button type="button" class="diag-click" data-diag-open="${idx}"><span class="diag-badge ${r.category==="self-test"?"test":"err"}">${esc(r.category)}</span></button></td><td><button type="button" class="diag-click" data-diag-open="${idx}">${esc(r.location)}</button></td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td><button type="button" class="diag-click" data-diag-open="${idx}">${esc(r.detail||"—")}</button></td><td><div class="diag-actions"><label class="diag-confirm"><input type="checkbox" data-diag-index="${idx}" ${confirmed?"checked":""}><span class="${confirmed?"state-confirmed":"state-unconfirmed"}">${confirmed?"確認済み":"未確認"}</span></label><button class="diag-delete" type="button" data-diag-delete-index="${idx}">削除</button></div></td></tr>`;
+      const badgeClass=r.category==="self-test"?"test":(r.category==="admin-login-failed"?"sec":"err");
+      const main=`<tr class="${confirmed?"diag-row-confirmed":"diag-row-unconfirmed"}"><td>${esc(r.occurredAt?new Date(r.occurredAt).toLocaleString("ja-JP"):"—")}</td><td><button type="button" class="diag-click" data-diag-open="${idx}"><span class="diag-badge ${badgeClass}">${esc(r.category)}</span></button></td><td><button type="button" class="diag-click" data-diag-open="${idx}">${esc(r.location)}</button></td><td>${r.httpStatus==null?"—":esc(r.httpStatus)}</td><td>${r.online===false?"offline":"online"}</td><td>${esc(r.appVersion)}</td><td><button type="button" class="diag-click" data-diag-open="${idx}">${esc(r.detail||"—")}</button></td><td><div class="diag-actions"><label class="diag-confirm"><input type="checkbox" data-diag-index="${idx}" ${confirmed?"checked":""}><span class="${confirmed?"state-confirmed":"state-unconfirmed"}">${confirmed?"確認済み":"未確認"}</span></label><button class="diag-delete" type="button" data-diag-delete-index="${idx}">削除</button></div></td></tr>`;
       const detail=`<tr class="diag-detail-row" data-diag-detail-row="${idx}"><td colspan="8" class="diag-detail-cell">${diagnosticDetailHtml_(r)}</td></tr>`;
       return main+detail;
     }).join("")}</tbody></table>`:`<div class="diag-app-empty">通報なし</div>`;
